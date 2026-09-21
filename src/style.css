@@ -1,0 +1,351 @@
+:root{
+  font-family:"Yu Gothic UI","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  color:#203a35;
+  background:#f5f3ed;
+  font-synthesis:none;
+  line-height:1.65;
+  font-weight:500}
+  *{
+    box-sizing:border-box}
+    body{
+      margin:0}
+      button,select,input{
+        font:inherit}
+        button,a,select{
+          touch-action:manipulation}
+          button{
+            cursor:pointer}
+            button:disabled{
+              opacity:.45;
+              cursor:not-allowed}
+              button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{
+                outline:3px solid #be731b;
+                outline-offset:3px}
+                button{
+                  border:0}
+                  h1,h2,h3,p{
+                    margin-top:0}
+                    h2{
+                      font-size:1.4rem;
+                      letter-spacing:.03em}
+                      h3{
+                        font-size:1rem}
+                        p{
+                          overflow-wrap:anywhere}
+                          a{
+                            color:#17685a}
+                            select{
+                              max-width:100%;
+                              border:1px solid #acb9ad;
+                              border-radius:8px;
+                              padding:8px;
+                              background:#fff;
+                              color:inherit;
+                              min-height:44px}
+                              label{
+                                display:block;
+                                font-size:.85rem}
+                                label select{
+                                  display:block;
+                                  margin-top:4px}
+                                  .app-shell{
+                                    max-width:780px;
+                                    margin:auto;
+                                    padding:0 24px}
+                                    header{
+                                      padding:24px 0;
+                                      display:flex;
+                                      justify-content:space-between;
+                                      align-items:center;
+                                      border-bottom:1px solid #d7ddd2;
+                                      gap:12px}
+                                      .brand{
+                                        display:flex;
+                                        align-items:center;
+                                        gap:10px;
+                                        background:none;
+                                        color:inherit;
+                                        text-align:left;
+                                        padding:0;
+                                        font-weight:700;
+                                        line-height:1.4}
+                                        .brand small{
+                                          display:block;
+                                          font-size:.6rem;
+                                          letter-spacing:.14em;
+                                          font-weight:500}
+                                          .brand-mark{
+                                            background:#173e39;
+                                            color:#f5f3ed;
+                                            display:grid;
+                                            place-items:center;
+                                            width:44px;
+                                            height:48px;
+                                            clip-path:polygon(50% 0,90% 18%,100% 100%,0 100%,10% 18%);
+                                            font-size:1.45rem}
+                                            .version{
+                                              font-size:.63rem;
+                                              letter-spacing:.1em;
+                                              white-space:nowrap;
+                                              color:#64786d}
+                                              main{
+                                                padding:24px 0}
+                                                .hero{
+                                                  padding:26px 0 32px}
+                                                  .eyebrow{
+                                                    font-size:.74rem;
+                                                    letter-spacing:.18em;
+                                                    color:#577368;
+                                                    font-weight:700;
+                                                    margin-bottom:16px}
+                                                    .hero h1{
+                                                      font-family:"Yu Mincho",serif;
+                                                      font-size:clamp(2.1rem,7vw,3.4rem);
+                                                      line-height:1.5;
+                                                      letter-spacing:.06em;
+                                                      margin-bottom:24px}
+                                                      .hero p:not(.eyebrow){
+                                                        color:#65736b;
+                                                        font-size:.95rem}
+                                                        .primary,.secondary{
+                                                          border-radius:10px;
+                                                          min-height:48px;
+                                                          padding:12px 18px;
+                                                          font-weight:700;
+                                                          line-height:1.5}
+                                                          .primary{
+                                                            background:#194f43;
+                                                            color:#fff}
+                                                            .primary:hover{
+                                                              background:#103d33}
+                                                              .secondary{
+                                                                background:#fff;
+                                                                border:1px solid #b9c6bb;
+                                                                color:#294c40}
+                                                                .wide{
+                                                                  width:100%}
+                                                                  .feature-strip{
+                                                                    display:grid;
+                                                                    grid-template-columns:repeat(3,1fr);
+                                                                    padding:20px 0;
+                                                                    border-top:1px solid #d7ddd2;
+                                                                    border-bottom:1px solid #d7ddd2}
+                                                                    .feature-strip div{
+                                                                      text-align:center;
+                                                                      border-right:1px solid #d7ddd2}
+                                                                      .feature-strip div:last-child{
+                                                                        border:0}
+                                                                        .feature-strip strong{
+                                                                          display:block;
+                                                                          font:2rem Georgia,serif}
+                                                                          .feature-strip span{
+                                                                            font-size:.73rem;
+                                                                            color:#65736b}
+                                                                            .future{
+                                                                              padding:32px 0 12px}
+                                                                              .future p{
+                                                                                color:#667468}
+                                                                                .actions{
+                                                                                  display:flex;
+                                                                                  flex-wrap:wrap;
+                                                                                  gap:10px}
+                                                                                  .actions>*{
+                                                                                    flex:1}
+                                                                                    .dev-banner{
+                                                                                      background:#e9eedf;
+                                                                                      border-left:3px solid #83986a;
+                                                                                      padding:12px 16px;
+                                                                                      border-radius:0 8px 8px 0;
+                                                                                      margin-bottom:24px;
+                                                                                      font-size:.83rem}
+                                                                                      .dev-banner p{
+                                                                                        margin:5px 0 0;
+                                                                                        color:#54634d}
+                                                                                        .section-heading{
+                                                                                          display:flex;
+                                                                                          align-items:center;
+                                                                                          justify-content:space-between;
+                                                                                          gap:12px}
+                                                                                          .section-heading h2{
+                                                                                            margin-bottom:16px}
+                                                                                            .section-heading .eyebrow{
+                                                                                              margin-bottom:4px}
+                                                                                              .badge{
+                                                                                                background:#e4e9de;
+                                                                                                border-radius:20px;
+                                                                                                padding:5px 13px;
+                                                                                                white-space:nowrap;
+                                                                                                font-size:.8rem}
+                                                                                                .toolbar{
+                                                                                                  display:flex;
+                                                                                                  flex-wrap:wrap;
+                                                                                                  justify-content:space-between;
+                                                                                                  align-items:center;
+                                                                                                  gap:12px;
+                                                                                                  margin-bottom:12px}
+                                                                                                  .muted{
+                                                                                                    font-size:.76rem;
+                                                                                                    color:#647164;
+                                                                                                    margin:12px 0}
+                                                                                                    .board{
+                                                                                                      background:#d7dcca;
+                                                                                                      padding:7px;
+                                                                                                      border:1px solid #b2bfab;
+                                                                                                      border-radius:10px}
+                                                                                                      .columns,.board-row{
+                                                                                                        display:grid;
+                                                                                                        grid-template-columns:repeat(6,minmax(0,1fr));
+                                                                                                        gap:4px}
+                                                                                                        .columns{
+                                                                                                          text-align:center;
+                                                                                                          font-size:.66rem;
+                                                                                                          color:#526345;
+                                                                                                          margin-bottom:5px}
+                                                                                                          .board-row{
+                                                                                                            margin-top:4px}
+                                                                                                            .board-row.border-row{
+                                                                                                              margin-bottom:17px;
+                                                                                                              position:relative}
+                                                                                                              .cell{
+                                                                                                                min-width:0;
+                                                                                                                position:relative;
+                                                                                                                border-radius:5px;
+                                                                                                                border:1px solid #c2c9b5;
+                                                                                                                min-height:65px;
+                                                                                                                padding:3px 1px;
+                                                                                                                background:#f8f6e8;
+                                                                                                                color:#243b2b;
+                                                                                                                line-height:1.2;
+                                                                                                                display:flex;
+                                                                                                                flex-direction:column;
+                                                                                                                align-items:center;
+                                                                                                                justify-content:space-between}
+                                                                                                                .hq{
+                                                                                                                  grid-column:span 2;
+                                                                                                                  background:#ede7d6}
+                                                                                                                  .coordinate{
+                                                                                                                    font-size:.59rem;
+                                                                                                                    font-weight:400;
+                                                                                                                    opacity:.75}
+                                                                                                                    .piece-label{
+                                                                                                                      font-size:clamp(.7rem,3.2vw,1.04rem);
+                                                                                                                      font-weight:700;
+                                                                                                                      white-space:nowrap}
+                                                                                                                      .owner-label{
+                                                                                                                        font-size:.54rem;
+                                                                                                                        letter-spacing:.03em}
+                                                                                                                        .side-2{
+                                                                                                                          background:#e8edf0;
+                                                                                                                          border-bottom:3px solid #8a9da4;
+                                                                                                                          color:#314a59}
+                                                                                                                          .side-1{
+                                                                                                                            border-bottom:3px solid #8d9a70}
+                                                                                                                            .empty{
+                                                                                                                              color:#8b9985;
+                                                                                                                              background:#e8ecdc}
+                                                                                                                              .selected{
+                                                                                                                                outline:3px solid #174c41;
+                                                                                                                                outline-offset:-3px}
+                                                                                                                                .legal{
+                                                                                                                                  box-shadow:inset 0 0 0 3px #af751f;
+                                                                                                                                  background:#f8e9be}
+                                                                                                                                  .gate:after{
+                                                                                                                                    content:"";
+                                                                                                                                    position:absolute;
+                                                                                                                                    bottom:-15px;
+                                                                                                                                    height:11px;
+                                                                                                                                    width:55%;
+                                                                                                                                    background:#768765;
+                                                                                                                                    border-left:2px solid #f5f3ed;
+                                                                                                                                    border-right:2px solid #f5f3ed}
+                                                                                                                                    .notice{
+                                                                                                                                      padding:12px;
+                                                                                                                                      background:#ebece4;
+                                                                                                                                      font-size:.85rem;
+                                                                                                                                      border-radius:8px;
+                                                                                                                                      margin:16px 0}
+                                                                                                                                      .status-line{
+                                                                                                                                        display:flex;
+                                                                                                                                        justify-content:space-between;
+                                                                                                                                        font-size:.84rem;
+                                                                                                                                        margin:12px 0}
+                                                                                                                                        .confirm,.result{
+                                                                                                                                          padding:18px;
+                                                                                                                                          background:#e5edde;
+                                                                                                                                          border:1px solid #b3c1a5;
+                                                                                                                                          border-radius:10px;
+                                                                                                                                          margin-top:16px}
+                                                                                                                                          .confirm h3{
+                                                                                                                                            margin-bottom:8px}
+                                                                                                                                            .confirm fieldset{
+                                                                                                                                              border:1px solid #a7b89e;
+                                                                                                                                              border-radius:6px;
+                                                                                                                                              margin-bottom:14px}
+                                                                                                                                              .confirm fieldset label{
+                                                                                                                                                display:inline-flex;
+                                                                                                                                                align-items:center;
+                                                                                                                                                gap:8px;
+                                                                                                                                                padding:8px 14px}
+                                                                                                                                                .confirm input{
+                                                                                                                                                  width:20px;
+                                                                                                                                                  height:20px;
+                                                                                                                                                  accent-color:#194f43}
+                                                                                                                                                  .result{
+                                                                                                                                                    margin:0 0 20px}
+                                                                                                                                                    .result strong{
+                                                                                                                                                      font-size:1.5rem}
+                                                                                                                                                      .result p{
+                                                                                                                                                        margin:4px 0 0}
+                                                                                                                                                        .history{
+                                                                                                                                                          margin-top:26px}
+                                                                                                                                                          .history ol{
+                                                                                                                                                            list-style:none;
+                                                                                                                                                            padding:0;
+                                                                                                                                                            font-size:.84rem;
+                                                                                                                                                            color:#4e6559}
+                                                                                                                                                            .history li{
+                                                                                                                                                              padding:8px 0;
+                                                                                                                                                              border-top:1px solid #d7ddd2}
+                                                                                                                                                              .debug-tools{
+                                                                                                                                                                margin-top:28px;
+                                                                                                                                                                border-top:1px solid #d7ddd2;
+                                                                                                                                                                padding-top:18px;
+                                                                                                                                                                font-size:.8rem}
+                                                                                                                                                                .debug-tools summary{
+                                                                                                                                                                  cursor:pointer;
+                                                                                                                                                                  padding:8px 0}
+                                                                                                                                                                  .debug-tools p{
+                                                                                                                                                                    margin-top:12px}
+                                                                                                                                                                    .placeholder{
+                                                                                                                                                                      min-height:50vh;
+                                                                                                                                                                      padding:30px 0}
+                                                                                                                                                                      footer{
+                                                                                                                                                                        padding:22px 0 30px;
+                                                                                                                                                                        border-top:1px solid #d7ddd2;
+                                                                                                                                                                        display:flex;
+                                                                                                                                                                        flex-wrap:wrap;
+                                                                                                                                                                        gap:12px;
+                                                                                                                                                                        justify-content:space-between;
+                                                                                                                                                                        font-size:.73rem}
+                                                                                                                                                                        footer span{
+                                                                                                                                                                          color:#778173}
+                                                                                                                                                                          @media(max-width:400px){
+                                                                                                                                                                            .app-shell{
+                                                                                                                                                                              padding:0 12px}
+                                                                                                                                                                              .cell{
+                                                                                                                                                                                min-height:59px}
+                                                                                                                                                                                .board{
+                                                                                                                                                                                  padding:5px}
+                                                                                                                                                                                  .board-row,.columns{
+                                                                                                                                                                                    gap:3px}
+                                                                                                                                                                                    .primary,.secondary{
+                                                                                                                                                                                      padding:12px 11px}
+                                                                                                                                                                                      .version{
+                                                                                                                                                                                        font-size:.56rem}
+                                                                                                                                                                                        .hero{
+                                                                                                                                                                                          padding-top:18px}
+                                                                                                                                                                                        }
+                                                                                                                                                                                        @media(prefers-reduced-motion:reduce){
+                                                                                                                                                                                          *{
+                                                                                                                                                                                            scroll-behavior:auto}
+                                                                                                                                                                                          }
