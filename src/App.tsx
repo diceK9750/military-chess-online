@@ -68,7 +68,7 @@ export default function App() {
   }, []);
 
   function requestNewGame() {
-    if ((matchRef.current && !matchRef.current.game.result) || setupRef.current) { setPendingNew(true); setScreen('home'); }
+    if (matchRef.current || setupRef.current) { setPendingNew(true); setScreen('home'); }
     else setScreen('cpu-select');
   }
 
