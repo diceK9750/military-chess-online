@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { scenario } from '../dev/fixtures';
 import { localDraftStore } from '../dev/storage';
 import { LocalGame } from './LocalGame';
+import { CpuSetup } from './CpuSetup';
 import { Setup } from './Setup';
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
@@ -14,7 +15,7 @@ test('home links to formal rules and clearly marks online placeholders', async (
   render(<App />); const user = userEvent.setup();
   expect(screen.getByRole('link', { name: /正式ゲームルール/ })).toHaveAttribute('href', expect.stringContaining('docs/GAME_RULES.md'));
   await user.click(screen.getByRole('button', { name: '対局一覧' }));
-  expect(screen.getByText(/オンライン対局・ログイン・招待は今後/)).toBeInTheDocument();
+  expect(screen.getByText(/オンライン対局・ログイン・招待は将来の拡張/)).toBeInTheDocument();
 });
 test('move requires lane selection and explicit confirmation', async () => {
   render(<LocalGame initial={scenario('aircraft')} />); const user = userEvent.setup();
@@ -72,4 +73,28 @@ test('storage rejects corrupt data and reports write failure', () => {
   expect(localDraftStore.load(1)).toBeNull();
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
   expect(localDraftStore.save(1, [])).toBe(false);
+});
+test('CPU setup confirms one human placement and produces a valid full game', async () => {
+  const onStart = vi.fn();
+  const store = { load: () => null, save: vi.fn(() => true) };
+  render(<CpuSetup difficulty="normal" seed={9751} onStart={onStart} store={store} />);
+  const user = userEvent.setup();
+  expect(screen.queryByRole('combobox', { name: '配置する側' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /B1 P1/ }));
+  await user.click(screen.getByRole('button', { name: /E1 P1/ }));
+  expect(store.save).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole('button', { name: 'この配置で確定' }));
+  expect(onStart).toHaveBeenCalledOnce();
+  expect(onStart.mock.calls[0][0].pieces).toHaveLength(46);
+  expect(onStart.mock.calls[0][0].firstPlayer).toBe(2);
+});
+test('CPU match hides opponent types and automatically takes its turn', async () => {
+  const game = scenario('aircraft');
+  const onChange = vi.fn();
+  render(<LocalGame initial={{ ...game, turn: 2 }} onChange={onChange} mode="cpu" difficulty="normal" cpuSeed={9750} />);
+  expect(screen.getByRole('heading', { name: 'CPUの手番' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'HQ-P2 P2 工兵' })).not.toBeInTheDocument();
+  await waitFor(() => expect(onChange).toHaveBeenCalledOnce());
+  expect(onChange.mock.calls[0][0].moveCount).toBe(1);
 });

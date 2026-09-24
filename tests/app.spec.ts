@@ -57,3 +57,33 @@ test('configuration autosave survives reload but READY is not persisted', async 
   await expect(page.getByRole('button', { name: 'この配置で確定' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('setup.png'), fullPage: true });
 });
+
+for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${difficulty}: setup, hidden pieces, human move, CPU reply`, async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: new RegExp(`^${difficulty}`) }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの陣形' })).toBeVisible();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+  const opponent = page.locator('.cell.side-2');
+  const opponentCount = await opponent.count();
+  expect(opponentCount).toBeGreaterThanOrEqual(22); // CPU may have moved and fought when chosen to play first.
+  expect(opponentCount).toBeLessThanOrEqual(23);
+  expect(await opponent.locator('.piece-label').allTextContents()).toEqual(Array(opponentCount).fill('？'));
+  const own = page.locator('.cell.side-1');
+  let selected = false;
+  for (let i = 0; i < await own.count(); i++) {
+    await own.nth(i).click();
+    if (await page.locator('.cell.legal').count() > 0) { selected = true; break; }
+  }
+  expect(selected).toBe(true);
+  await page.locator('.cell.legal').first().click();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect.poll(async () => Number((await page.locator('.badge').first().textContent())?.replace(/\D/g, '') ?? 0), { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 850 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  if (difficulty === 'かんたん') await page.screenshot({ path: test.info().outputPath('cpu-match.png'), fullPage: true });
+  expect(errors).toEqual([]);
+});
