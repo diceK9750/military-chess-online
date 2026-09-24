@@ -7,7 +7,7 @@ test('setup → confirmed move, narrow layout, and rules link', async ({ page })
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('見えない陣形');
   await expect(page.getByRole('link', { name: /正式ゲームルール/ })).toHaveAttribute('href', /docs\/GAME_RULES.md$/);
-  await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await page.getByRole('combobox', { name: '配置する側' }).selectOption('2');
   await page.getByRole('button', { name: 'この配置で確定' }).click();
@@ -19,7 +19,7 @@ test('setup → confirmed move, narrow layout, and rules link', async ({ page })
   await page.getByRole('button', { name: '確定して実行' }).click();
   await expect(page.getByText('1手', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: /軍人将棋/ }).click();
-  await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   await expect(page.getByText('1手', { exact: true })).toBeVisible();
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
@@ -30,17 +30,17 @@ test('setup → confirmed move, narrow layout, and rules link', async ({ page })
   expect(errors).toEqual([]);
 });
 test('HQ lanes remain canonical when rotated and result visible', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.goto('/'); await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   await page.getByText('検証用の盤面を開く', { exact: true }).click();
   await page.getByRole('button', { name: '飛行機のC/D経路' }).click();
   await page.getByRole('combobox', { name: '盤面の向き' }).selectOption('2');
   await page.getByRole('button', { name: 'HQ-P1 P1 飛行機' }).click();
   await page.getByRole('button', { name: 'HQ-P2 P2 工兵' }).click();
   await expect(page.getByRole('button', { name: '確定して実行' })).toBeDisabled();
-  await page.getByRole('radio', { name: 'C列' }).check();
+  await page.getByRole('radio', { name: 'C列を通る' }).check();
   await page.getByRole('button', { name: '確定して実行' }).click();
   await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
-  await expect(page.getByText(/（C列）：攻撃側勝利/)).toBeVisible();
+  await expect(page.locator('.latest-event')).toContainText('（C列）：攻撃側勝利');
   await page.getByRole('button', { name: '司令部占領', exact: true }).click();
   await page.getByRole('button', { name: 'C7 P1 大将' }).click();
   await page.getByRole('button', { name: 'HQ-P2 空き' }).click();
@@ -49,12 +49,12 @@ test('HQ lanes remain canonical when rotated and result visible', async ({ page 
   await page.screenshot({ path: test.info().outputPath('result.png'), fullPage: true });
 });
 test('configuration autosave survives reload but READY is not persisted', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.goto('/'); await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   const before = await page.locator('[data-site="B1"]').getAttribute('aria-label');
   await page.locator('[data-site="B1"]').click(); await page.locator('[data-site="E1"]').click();
   const after = await page.locator('[data-site="B1"]').getAttribute('aria-label'); expect(after).not.toBe(before);
   await page.getByRole('button', { name: 'この配置で確定' }).click();
-  await page.reload(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.reload(); await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   await expect(page.locator('[data-site="B1"]')).toHaveAttribute('aria-label', after!);
   await expect(page.getByRole('button', { name: 'この配置で確定' })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('setup.png'), fullPage: true });
@@ -63,7 +63,7 @@ test('configuration autosave survives reload but READY is not persisted', async 
 for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${difficulty}: setup, hidden pieces, human move, CPU reply`, async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await page.getByRole('button', { name: new RegExp(`^${difficulty}`) }).click();
   await expect(page.getByRole('heading', { name: 'あなたの陣形' })).toBeVisible();
   await page.getByRole('button', { name: 'この配置で確定' }).click();
@@ -93,7 +93,7 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
 test('CPU match auto-saves and resumes after reload and later moves', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await page.getByRole('button', { name: /^かんたん/ }).click();
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
@@ -123,7 +123,7 @@ test('CPU match auto-saves and resumes after reload and later moves', async ({ p
 
 test('placement changes resume with selected difficulty and seed', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await page.getByRole('button', { name: /^ふつう/ }).click();
   const before = await page.locator('[data-site="B1"]').getAttribute('aria-label');
   await page.locator('[data-site="B1"]').click(); await page.locator('[data-site="E1"]').click();
@@ -133,7 +133,7 @@ test('placement changes resume with selected difficulty and seed', async ({ page
   expect(draft.difficulty).toBe('normal');
   await page.reload();
   await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await expect(page.getByRole('dialog', { name: '新しい対局の確認' })).toBeVisible();
   await page.getByRole('button', { name: 'キャンセル' }).click();
   await page.getByRole('button', { name: '続きから' }).click();
@@ -150,7 +150,7 @@ test('placement changes resume with selected difficulty and seed', async ({ page
 test('password file exports, rejects wrong password and tampering, then imports after confirmation', async ({ page }) => {
   const password = randomUUID();
   await page.goto('/');
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await page.getByRole('button', { name: /^ふつう/ }).click();
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
@@ -197,13 +197,79 @@ test('corrupt autosave is rejected, while new game and overwrite confirmation re
   await page.reload();
   await expect(page.getByRole('alert')).toContainText('復元できません');
   await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await page.getByRole('button', { name: /^かんたん/ }).click();
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
   await page.getByRole('button', { name: 'タイトルへ' }).click();
-  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
   await expect(page.getByRole('dialog', { name: '新しい対局の確認' })).toBeVisible();
   await page.getByRole('button', { name: 'キャンセル' }).click();
   await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
+});
+
+test('mobile-first journey, keyboard controls, and six responsive widths', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'コンピューターと対戦' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();
+  await page.getByRole('button', { name: '遊び方' }).click();
+  await expect(page.getByText('戦闘は自動で判定します。', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'タイトルへ戻る' }).click();
+  await page.getByRole('button', { name: 'コンピューターと対戦' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: '難易度を選ぶ' })).toBeVisible();
+  await expect(page.getByText(/初めて遊ぶ人向け/)).toBeVisible();
+  await expect(page.getByText(/公開情報を使って/)).toBeVisible();
+  await page.getByRole('button', { name: /^かんたん/ }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/配置完了。この配置で対局を始められます/)).toBeVisible();
+  await page.getByText('自軍の駒一覧・枚数を見る').click();
+  await expect(page.locator('.inventory-type')).toHaveCount(16);
+  await page.locator('[data-site="B1"]').focus(); await page.keyboard.press('Enter');
+  await expect(page.locator('[data-site="B1"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('[data-site="E1"]').focus(); await page.keyboard.press('Enter');
+  for (const width of [320, 360, 390, 430, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `setup at ${width}px`).toBe(true);
+    const sizes = await page.locator('.board .cell').evaluateAll(cells => cells.map(cell => cell.getBoundingClientRect().width));
+    expect(Math.min(...sizes), `board cells at ${width}px`).toBeGreaterThanOrEqual(40);
+    if (width === 320 && test.info().project.name === 'mobile') await page.screenshot({ path: test.info().outputPath('cpu-setup-320.png'), fullPage: true });
+  }
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const movesBefore = await page.locator('.badge').first().textContent();
+  const own = page.locator('.board .cell.side-1');
+  for (let index = 0; index < await own.count(); index++) {
+    await own.nth(index).click();
+    if (await page.locator('.board .cell.legal').count()) break;
+  }
+  await expect(page.locator('.board .cell.selected')).toHaveCount(1);
+  await page.locator('.board .cell.legal').first().click();
+  await expect(page.locator('.confirm')).toContainText(/から .* へ動かします/);
+  await page.getByRole('button', { name: '選び直す' }).click();
+  await expect(page.locator('.badge').first()).toHaveText(movesBefore!);
+  await page.locator('.board .cell.legal').first().click();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await expect(page.locator('.latest-event')).toContainText('コンピューター');
+  await expect(page.locator('.board .cell.last-from')).toHaveCount(1);
+  await page.getByRole('button', { name: '対局を保存' }).click();
+  await expect(page.getByText(/8文字以上のパスワード/)).toBeVisible();
+  for (const width of [320, 360, 390, 430, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `save at ${width}px`).toBe(true);
+  }
+  await page.getByRole('button', { name: '戻る' }).click();
+  await page.getByRole('button', { name: 'タイトルへ' }).click();
+  await page.getByRole('button', { name: '続きから' }).click();
+  await expect(page.locator('.latest-event')).toContainText('コンピューター');
+  await page.getByRole('button', { name: 'タイトルへ' }).click();
+  await page.getByRole('button', { name: 'コンピューターと対戦' }).click();
+  const dialog = page.getByRole('dialog', { name: '新しい対局の確認' });
+  await expect(dialog).toBeFocused();
+  await page.setViewportSize({ width: 320, height: 850 });
+  expect(await dialog.evaluate(element => element.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+  if (test.info().project.name === 'mobile') await page.screenshot({ path: test.info().outputPath('replace-dialog-320.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
 });

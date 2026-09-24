@@ -44,6 +44,7 @@ export function ExportPanel({ match, onClose }: { match: SavedCpuMatch; onClose(
   return <section className="save-panel"><p className="eyebrow">LOCAL BACKUP</p><h1>対局を保存</h1>
     <p>対局をパスワードで暗号化して、この端末へファイルを保存します。パスワードを忘れると復元できません。</p>
     <form onSubmit={submit}>
+      <p className="save-hint">8文字以上のパスワードを入力し、確認欄へ同じ文字を入力してください。</p>
       <PasswordField label="パスワード" value={password} onChange={setPassword} visible={visible} />
       <PasswordField label="パスワード（確認）" value={confirmation} onChange={setConfirmation} visible={visible} />
       <label className="save-toggle"><input type="checkbox" checked={visible} onChange={event => setVisible(event.target.checked)} /> パスワードを表示</label>
@@ -76,7 +77,7 @@ export function ImportPanel({ onLoaded, onClose }: { onLoaded(match: SavedCpuMat
   }
 
   return <section className="save-panel"><p className="eyebrow">RESTORE MATCH</p><h1>保存した対局を読み込む</h1>
-    <p>パスワード付き .mcsave ファイルを選びます。検証が終わるまで現在の対局は変更しません。</p>
+    <p>「対局を保存」で作成したパスワード付き .mcsave ファイルを選びます。検証が終わるまで現在の対局は変更しません。</p>
     <form onSubmit={submit}>
       <label className="save-field">対局ファイル<input type="file" accept={SAVE_EXTENSION} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
       <PasswordField label="パスワード" value={password} onChange={setPassword} visible={visible} />
