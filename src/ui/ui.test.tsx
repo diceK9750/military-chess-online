@@ -9,8 +9,57 @@ import { localDraftStore } from '../dev/storage';
 import { LocalGame } from './LocalGame';
 import { CpuSetup } from './CpuSetup';
 import { Setup } from './Setup';
+import { defaultPlacement } from '../dev/fixtures';
+import { startGame } from '../game/game';
+import { createSavedMatch, MATCH_STORAGE_KEY, storeSavedMatch } from '../save/match';
+import { ExportPanel, ImportPanel } from './SaveFilePanels';
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+test('title offers disabled resume, import, and instructions when no match is saved', async () => {
+  render(<App />);
+  expect(screen.getByRole('button', { name: '続きから' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '保存した対局を読み込む' })).toBeEnabled();
+  await userEvent.setup().click(screen.getByRole('button', { name: '遊び方' }));
+  expect(screen.getByRole('heading', { name: '遊び方' })).toBeInTheDocument();
+});
+test('saved match can resume and new match asks before replacement', async () => {
+  const saved = createSavedMatch(startGame(defaultPlacement(1), defaultPlacement(2), 1), 'easy', 7);
+  storeSavedMatch(saved);
+  render(<App />); const user = userEvent.setup();
+  expect(screen.getByRole('button', { name: '続きから' })).toBeEnabled();
+  await user.click(screen.getByRole('button', { name: '続きから' }));
+  expect(screen.getByRole('heading', { name: 'あなたの手番' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'タイトルへ' }));
+  await user.click(screen.getByRole('button', { name: /CPUと対戦/ }));
+  expect(screen.getByRole('dialog', { name: '新しい対局の確認' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'キャンセル' }));
+  expect(localStorage.getItem(MATCH_STORAGE_KEY)).not.toBeNull();
+});
+test('corrupt autosave shows error but leaves new game available', () => {
+  localStorage.setItem(MATCH_STORAGE_KEY, '{broken');
+  render(<App />);
+  expect(screen.getByRole('alert')).toHaveTextContent('復元できません');
+  expect(screen.getByRole('button', { name: '続きから' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /CPUと対戦/ })).toBeEnabled();
+});
+test('export requires matching passwords and can toggle visibility', async () => {
+  const saved = createSavedMatch(startGame(defaultPlacement(1), defaultPlacement(2), 1), 'easy', 7);
+  render(<ExportPanel match={saved} onClose={vi.fn()} />); const user = userEvent.setup();
+  const password = Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => (byte % 10).toString()).join('');
+  await user.type(screen.getByLabelText('パスワード', { exact: true }), password);
+  await user.type(screen.getByLabelText('パスワード（確認）'), password + '0');
+  await user.click(screen.getByRole('button', { name: 'ファイルを保存' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('一致しません');
+  await user.click(screen.getByRole('checkbox', { name: 'パスワードを表示' }));
+  expect(screen.getByLabelText('パスワード', { exact: true })).toHaveAttribute('type', 'text');
+});
+test('import rejects a wrong extension before decryption', async () => {
+  render(<ImportPanel onLoaded={vi.fn()} onClose={vi.fn()} />); const user = userEvent.setup({ applyAccept: false });
+  await user.upload(screen.getByLabelText('対局ファイル'), new File(['{}'], 'wrong.txt'));
+  await user.type(screen.getByLabelText('パスワード', { exact: true }), Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => (byte % 10).toString()).join(''));
+  await user.click(screen.getByRole('button', { name: '対局を読み込む' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('.mcsave');
+});
 test('home links to formal rules and clearly marks online placeholders', async () => {
   render(<App />); const user = userEvent.setup();
   expect(screen.getByRole('link', { name: /正式ゲームルール/ })).toHaveAttribute('href', expect.stringContaining('docs/GAME_RULES.md'));

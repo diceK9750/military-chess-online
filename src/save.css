@@ -1,0 +1,16 @@
+.home-save-actions,.save-toolbar { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.home-save-actions .secondary { margin:0; }
+.save-summary { font-size:.82rem; color:#516658; margin-top:16px; }
+.save-panel { max-width:560px; min-height:55vh; padding:24px 0; }
+.save-panel p { line-height:1.7; }
+.save-panel form { display:grid; gap:15px; margin-top:22px; }
+.save-field { display:grid; gap:7px; font-weight:700; }
+.save-field input { box-sizing:border-box; width:100%; min-height:46px; padding:10px 12px; border:1px solid #a9b9aa; border-radius:8px; font:inherit; color:#203a35; background:#fff; }
+.save-field input[type=file] { height:auto; }
+.save-toggle { display:flex; align-items:center; gap:10px; font-size:.87rem; }
+.save-toggle input { width:20px; height:20px; accent-color:#194f43; }
+.save-confirm { border:1px solid #b3c1a5; background:#e8f0e8; border-radius:12px; padding:18px; margin:20px 0; }
+.save-confirm h2 { font-size:1.1rem; margin:0 0 10px; }
+.save-confirm p { font-size:.87rem; line-height:1.6; }
+.save-error { padding:12px; background:#fff0e9; color:#803723; border-left:3px solid #b54d31; border-radius:4px; }
+@media(max-width:400px) { .home-save-actions { display:grid; } .save-confirm .actions { display:grid; } }

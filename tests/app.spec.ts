@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 
 test('setup → confirmed move, narrow layout, and rules link', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -86,4 +88,122 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   if (difficulty === 'かんたん') await page.screenshot({ path: test.info().outputPath('cpu-match.png'), fullPage: true });
   expect(errors).toEqual([]);
+});
+
+test('CPU match auto-saves and resumes after reload and later moves', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  expect(before.game.pieces).toHaveLength(46);
+  expect(before.initialPlacements.p1).toHaveLength(23);
+  expect(before.initialPlacements.p2).toHaveLength(23);
+  await page.reload();
+  await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
+  await page.getByRole('button', { name: '続きから' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const own = page.locator('.cell.side-1');
+  for (let i = 0; i < await own.count(); i++) {
+    await own.nth(i).click();
+    if (await page.locator('.cell.legal').count() > 0) break;
+  }
+  await page.locator('.cell.legal').first().click();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect.poll(async () => (await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!))).game.moveCount).toBeGreaterThan(before.game.moveCount);
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const after = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  expect(after.stateVersion).toBeGreaterThan(before.stateVersion);
+  expect(after.game.events.filter((event: { kind: string; actor?: number }) => event.kind === 'MOVE' && event.actor === 2).length).toBeGreaterThan(before.game.events.filter((event: { kind: string; actor?: number }) => event.kind === 'MOVE' && event.actor === 2).length);
+  await page.reload(); await page.getByRole('button', { name: '続きから' }).click();
+  await expect(page.locator('.badge').first()).toContainText(String(after.game.moveCount));
+});
+
+test('placement changes resume with selected difficulty and seed', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^ふつう/ }).click();
+  const before = await page.locator('[data-site="B1"]').getAttribute('aria-label');
+  await page.locator('[data-site="B1"]').click(); await page.locator('[data-site="E1"]').click();
+  const after = await page.locator('[data-site="B1"]').getAttribute('aria-label');
+  expect(after).not.toBe(before);
+  const draft = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-setup:v1')!));
+  expect(draft.difficulty).toBe('normal');
+  await page.reload();
+  await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await expect(page.getByRole('dialog', { name: '新しい対局の確認' })).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル' }).click();
+  await page.getByRole('button', { name: '続きから' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの陣形' })).toBeVisible();
+  await expect(page.locator('[data-site="B1"]')).toHaveAttribute('aria-label', after!);
+  await expect(page.getByText(/難易度：ふつう/)).toBeVisible();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  const match = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  expect(match.localGameId).toBe(draft.localGameId);
+  expect(match.cpuSeed).toBe(draft.cpuSeed);
+  expect(await page.evaluate(() => localStorage.getItem('military-chess:cpu-setup:v1'))).toBeNull();
+});
+
+test('password file exports, rejects wrong password and tampering, then imports after confirmation', async ({ page }) => {
+  const password = randomUUID();
+  await page.goto('/');
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^ふつう/ }).click();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  await page.getByRole('button', { name: '対局を保存' }).click();
+  await page.setViewportSize({ width: 320, height: 850 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  if (test.info().project.name === 'mobile') await page.screenshot({ path: test.info().outputPath('password-save.png'), fullPage: true });
+  await page.getByLabel('パスワード', { exact: true }).fill(password);
+  await page.getByLabel('パスワード（確認）').fill(password + '0');
+  await page.getByRole('button', { name: 'ファイルを保存' }).click();
+  await expect(page.getByRole('alert')).toContainText('一致しません');
+  await page.getByLabel('パスワード（確認）').fill(password);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'ファイルを保存' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/\.mcsave$/);
+  const bytes = await readFile((await download.path())!);
+  const content = bytes.toString('utf8');
+  expect(content).not.toContain(password);
+  expect(content).not.toContain('initialPlacements');
+  const backup = { name: download.suggestedFilename(), mimeType: 'application/json', buffer: bytes };
+  await page.getByRole('button', { name: 'タイトルへ' }).click();
+  await page.getByRole('button', { name: '保存した対局を読み込む' }).click();
+  await page.locator('input[type=file]').setInputFiles(backup);
+  await page.getByLabel('パスワード', { exact: true }).fill(password + '0');
+  await page.getByRole('button', { name: '対局を読み込む' }).click();
+  await expect(page.getByRole('alert')).toContainText('パスワードが違うか');
+  expect((await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!))).localGameId).toBe(before.localGameId);
+  const altered = JSON.parse(content); altered.ciphertext = (altered.ciphertext[0] === 'A' ? 'B' : 'A') + altered.ciphertext.slice(1);
+  await page.locator('input[type=file]').setInputFiles({ ...backup, buffer: Buffer.from(JSON.stringify(altered)) });
+  await page.getByLabel('パスワード', { exact: true }).fill(password);
+  await page.getByRole('button', { name: '対局を読み込む' }).click();
+  await expect(page.getByRole('alert')).toContainText('破損・改ざん');
+  await page.locator('input[type=file]').setInputFiles(backup);
+  await page.getByRole('button', { name: '対局を読み込む' }).click();
+  await expect(page.getByRole('dialog', { name: '読み込みの確認' })).toBeVisible();
+  await page.getByRole('button', { name: '読み込んだ対局へ置き換える' }).click();
+  await expect(page.getByRole('heading', { name: /あなたの手番|CPUの手番/ })).toBeVisible();
+  expect((await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!))).localGameId).toBe(before.localGameId);
+});
+
+test('corrupt autosave is rejected, while new game and overwrite confirmation remain available', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('military-chess:cpu-match:v1', '{broken'));
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('復元できません');
+  await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await page.getByRole('button', { name: 'タイトルへ' }).click();
+  await page.getByRole('button', { name: /CPUと対戦/ }).first().click();
+  await expect(page.getByRole('dialog', { name: '新しい対局の確認' })).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
 });

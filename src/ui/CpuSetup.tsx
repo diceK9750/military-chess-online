@@ -8,13 +8,15 @@ import { validatePlacement } from '../game/placement';
 import type { GameState, Piece, Site } from '../game/types';
 import { Board } from './Board';
 
-export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore }: {
+export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, initialPieces, onPlacementChange }: {
   difficulty: Difficulty;
   seed: number;
   onStart(game: GameState): void;
   store?: DraftStore;
+  initialPieces?: readonly Piece[];
+  onPlacementChange?(pieces: readonly Piece[]): void;
 }) {
-  const [pieces, setPieces] = useState<Piece[]>(() => store.load(1) ?? defaultPlacement(1));
+  const [pieces, setPieces] = useState<Piece[]>(() => initialPieces ? initialPieces.map(piece => ({ ...piece })) : store.load(1) ?? defaultPlacement(1));
   const [selected, setSelected] = useState<Site | null>(null);
   const [notice, setNotice] = useState('2枚の駒を順にタップすると配置を交換できます。');
 
@@ -25,6 +27,7 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore }: {
     try {
       validatePlacement(next, 1);
       setPieces(next);
+      onPlacementChange?.(next);
       setNotice(store.save(1, next) ? '配置をこのブラウザへ保存しました。' : '保存できません。この画面内では配置を保持しています。');
     } catch { setNotice('交換できません。地雷・軍旗は突破口入口不可、軍旗は最後列不可です。'); }
     setSelected(null);
@@ -43,6 +46,6 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore }: {
     <Board pieces={pieces} perspective={1} selected={selected} onSelect={select} />
     <p className="notice" role="status">{notice}</p>
     <button className="primary wide" onClick={confirm}>この配置で確定</button>
-    <p className="muted">配置の交換だけをこの端末へ一時保存します。対局の自動保存と再読込後の続行は次段階で実装します。</p>
+    <p className="muted">配置交換はこのブラウザへ保存します。確定後は完全な対局状態を自動保存し、再読み込み後も「続きから」再開できます。</p>
   </section>;
 }
