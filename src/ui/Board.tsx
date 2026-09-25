@@ -1,6 +1,7 @@
 import { anchors, isHQ, SITES } from '../game/board';
 import { PIECES } from '../game/pieces';
 import type { Move, Piece, Player, Site } from '../game/types';
+import { PieceFace } from './PieceFace';
 
 interface Props { pieces: readonly Piece[]; perspective: Player; selected: Site | null; targets?: readonly Site[]; concealOwner?: Player; humanSide?: Player; lastMove?: Move; battleSite?: Site; routeLane?: 'C' | 'D'; disabled?: boolean; onSelect(site: Site): void }
 export function Board({ pieces, perspective, selected, targets = [], concealOwner, humanSide, lastMove, battleSite, routeLane, disabled = false, onSelect }: Props) {
@@ -21,7 +22,7 @@ export function Board({ pieces, perspective, selected, targets = [], concealOwne
           className={`cell ${isHQ(site) ? 'hq' : ''} ${piece ? `side-${piece.owner}` : 'empty'} ${targets.includes(site) ? 'legal' : ''} ${selected === site ? 'selected' : ''} ${entrance ? 'entrance' : ''} ${index === 3 && entrance ? 'gate' : ''} ${lastMove?.from === site ? 'last-from' : ''} ${lastMove?.to === site ? 'last-to' : ''} ${battleSite === site ? 'last-battle' : ''} ${onRoute ? 'route' : ''}`}
           onClick={() => onSelect(site)}>
           <span className="coordinate">{site}</span>
-          <span className="piece-label">{piece ? hidden ? '？' : PIECES[piece.type].label : targets.includes(site) ? '●' : isHQ(site) ? '司令部' : '·'}</span>
+          <span className="piece-label">{piece ? hidden ? '？' : <PieceFace type={piece.type} /> : targets.includes(site) ? '●' : isHQ(site) ? '司令部' : '·'}</span>
           <span className="owner-label">{piece ? humanSide ? piece.owner === humanSide ? '自軍' : '敵軍' : `P${piece.owner}` : isHQ(site) ? '司令部' : entrance ? '突破口' : '\u00a0'}</span>
           {marker && <span className="cell-marker" aria-hidden="true">{marker}</span>}
         </button>;

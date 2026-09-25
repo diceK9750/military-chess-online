@@ -166,6 +166,45 @@ test('CPU setup shows all 23 pieces, legal exchanges and a specific forbidden-pl
   expect(screen.getByRole('button', { name: 'この配置で確定' })).toBeEnabled();
 });
 
+test('setup board and inventory show the same icon above every formal piece name', async () => {
+  const expected = [
+    ['general', '大将', '⭐'], ['lieutenantGeneral', '中将', '⭐'], ['majorGeneral', '少将', '⭐'],
+    ['colonel', '大佐', '🛡️'], ['lieutenantColonel', '中佐', '🛡️'], ['major', '少佐', '🛡️'],
+    ['captain', '大尉', '🪖'], ['lieutenant', '中尉', '🪖'], ['secondLieutenant', '少尉', '🪖'],
+    ['aircraft', '飛行機', '✈️'], ['tank', 'タンク', '◼️'], ['engineer', '工兵', '🔧'],
+    ['mine', '地雷', '💣'], ['cavalry', '騎兵', '🐎'], ['spy', 'スパイ', '🕵️'], ['flag', '軍旗', '🚩'],
+  ] as const;
+  const { container } = render(<CpuSetup difficulty="easy" seed={2} onStart={vi.fn()} store={{ load: () => null, save: () => true }} />);
+  const placement = defaultPlacement(1);
+  expect(container.querySelectorAll('.board .cell.side-1 .piece-face')).toHaveLength(23);
+  for (const [type, name, icon] of expected) {
+    const site = placement.find(piece => piece.type === type)?.position;
+    const face = container.querySelector(`.board [data-site="${site}"] .piece-face`);
+    expect(face?.children[0]).toHaveTextContent(icon);
+    expect(face?.children[1]).toHaveTextContent(name);
+  }
+  await userEvent.setup().click(screen.getByText('自軍の駒一覧・枚数を見る'));
+  const inventory = container.querySelectorAll('.inventory-type > .piece-face');
+  expect(inventory).toHaveLength(expected.length);
+  expected.forEach(([, name, icon]) => {
+    const face = Array.from(inventory).find(element => element.querySelector('.piece-name')?.textContent === name);
+    expect(face?.children[0]).toHaveTextContent(icon);
+    expect(face?.children[1]).toHaveTextContent(name);
+  });
+});
+
+test('CPU match shows own icon and name without adding an enemy icon or name', () => {
+  const { container } = render(<LocalGame initial={scenario('aircraft')} mode="cpu" />);
+  const own = screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' });
+  expect(own.querySelector('.piece-icon')).toHaveTextContent('✈️');
+  expect(own.querySelector('.piece-name')).toHaveTextContent('飛行機');
+  const enemy = screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' });
+  expect(enemy.querySelector('.piece-label')).toHaveTextContent('？');
+  expect(enemy.querySelector('.piece-face')).toBeNull();
+  expect(container.querySelector('.board')).not.toHaveTextContent('工兵');
+  expect(container.querySelector('.board')).not.toHaveTextContent('🔧');
+});
+
 test('invalid destination keeps selection, confirmation names own piece, and cancel keeps the game unchanged', async () => {
   const { container } = render(<LocalGame initial={scenario('capture')} />); const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));

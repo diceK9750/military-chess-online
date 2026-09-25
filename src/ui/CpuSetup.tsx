@@ -9,6 +9,7 @@ import { validatePlacement } from '../game/placement';
 import { PIECES, PIECE_TYPES } from '../game/pieces';
 import { RuleError, type GameState, type Piece, type Site } from '../game/types';
 import { Board } from './Board';
+import { PieceFace } from './PieceFace';
 
 function exchange(pieces: readonly Piece[], from: Site, to: Site): Piece[] {
   return pieces.map(piece => ({ ...piece, position: piece.position === from ? to : piece.position === to ? from : piece.position }));
@@ -79,7 +80,7 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
     <p className="notice" role="status">{notice}</p>
     <details className="inventory"><summary>自軍の駒一覧・枚数を見る</summary><p>23枚はすべて盤面に配置済みです。駒の名前から選ぶこともできます。</p><div className="inventory-grid">{PIECE_TYPES.map(type => {
       const group = pieces.filter(piece => piece.type === type);
-      return <div key={type} className="inventory-type"><strong>{PIECES[type].label}　{group.filter(piece => piece.position).length}/{PIECES[type].count}枚</strong><span>残り {PIECES[type].count - group.filter(piece => piece.position).length}枚</span><div>{group.map(piece => <button key={piece.id} className="secondary" aria-pressed={selected === piece.position} onClick={() => piece.position && select(piece.position)}>{piece.position ?? '未配置'}</button>)}</div></div>;
+      return <div key={type} className="inventory-type"><PieceFace type={type} /><strong>{group.filter(piece => piece.position).length}/{PIECES[type].count}枚</strong><span>残り {PIECES[type].count - group.filter(piece => piece.position).length}枚</span><div>{group.map(piece => <button key={piece.id} className="secondary" aria-pressed={selected === piece.position} onClick={() => piece.position && select(piece.position)}>{piece.position ?? '未配置'}</button>)}</div></div>;
     })}</div></details>
     <button className="primary wide" disabled={!valid} onClick={confirm}>この配置で確定</button>
     <p className="muted">地雷・軍旗は突破口入口へ置けません。軍旗は最後列にも置けません。変更した配置は自動保存され、「続きから」再開できます。</p>

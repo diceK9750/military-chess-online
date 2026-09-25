@@ -73,6 +73,8 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   expect(opponentCount).toBeGreaterThanOrEqual(22); // CPU may have moved and fought when chosen to play first.
   expect(opponentCount).toBeLessThanOrEqual(23);
   expect(await opponent.locator('.piece-label').allTextContents()).toEqual(Array(opponentCount).fill('？'));
+  expect(await opponent.locator('.piece-face').count()).toBe(0);
+  expect(await page.locator('.cell.side-1 .piece-face').count()).toBeGreaterThan(0);
   const own = page.locator('.cell.side-1');
   let selected = false;
   for (let i = 0; i < await own.count(); i++) {
@@ -233,7 +235,16 @@ test('mobile-first journey, keyboard controls, and six responsive widths', async
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `setup at ${width}px`).toBe(true);
     const sizes = await page.locator('.board .cell').evaluateAll(cells => cells.map(cell => cell.getBoundingClientRect().width));
     expect(Math.min(...sizes), `board cells at ${width}px`).toBeGreaterThanOrEqual(40);
+    if (width === 320 || width === 390) {
+      const clipped = await page.locator('.board .cell.side-1 .piece-name').evaluateAll(names => names.filter(name => {
+        const piece = name.closest('.cell')!.getBoundingClientRect();
+        const text = name.getBoundingClientRect();
+        return text.left < piece.left || text.right > piece.right || name.scrollWidth > name.clientWidth + 1;
+      }).length);
+      expect(clipped, `piece names at ${width}px`).toBe(0);
+    }
     if (width === 320 && test.info().project.name === 'mobile') await page.screenshot({ path: test.info().outputPath('cpu-setup-320.png'), fullPage: true });
+    if (width === 390 && test.info().project.name === 'mobile') await page.screenshot({ path: test.info().outputPath('cpu-setup-390.png'), fullPage: true });
   }
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();

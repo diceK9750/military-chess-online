@@ -9,6 +9,9 @@ main:focus, .save-confirm:focus, .confirm h3:focus { outline: none; }
 .board-guide { font-size: .78rem; color: #375344; margin: 6px 0 9px; }
 .setup-progress { background: #e5edde; border-left: 4px solid #225a43; border-radius: 5px; padding: 10px 12px; font-weight: 700; }
 .board .cell { touch-action: manipulation; }
+.piece-face { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: 100%; min-width: 0; text-align: center; line-height: 1.05; white-space: nowrap; }
+.piece-icon { display: block; font-size: clamp(.95rem, 4.1vw, 1.25rem); line-height: 1.1; }
+.piece-name { display: block; font-size: clamp(.68rem, 3vw, .85rem); font-weight: 700; letter-spacing: -.04em; }
 .board .cell:disabled { opacity: 1; cursor: default; }
 .board .cell.side-1 { border-top: 4px solid #356347; }
 .board .cell.side-2 { border-top: 4px double #47627a; }
@@ -28,8 +31,9 @@ main:focus, .save-confirm:focus, .confirm h3:focus { outline: none; }
 .inventory p, .postgame p { font-size: .82rem; }
 .inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-bottom: 14px; }
 .inventory-type { min-width: 0; border: 1px solid #d6ddd2; border-radius: 7px; padding: 8px; font-size: .78rem; }
-.inventory-type strong, .inventory-type span { display: block; }
-.inventory-type span { color: #52655a; }
+.inventory-type > .piece-face { display: flex; margin-bottom: 4px; }
+.inventory-type > strong, .inventory-type > span { display: block; text-align: center; }
+.inventory-type > span:not(.piece-face) { color: #52655a; }
 .inventory-type div { display: flex; gap: 4px; margin-top: 6px; }
 .inventory-type button { min-height: 44px; padding: 6px 8px; }
 .inventory-type button[aria-pressed="true"] { outline: 3px solid #174c41; }
