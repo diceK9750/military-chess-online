@@ -135,6 +135,6 @@ export default function App() {
       : screen === 'local' ? <><div className="dev-banner"><strong>開発用ローカル対局</strong><p>全駒の種類を表示する検証画面です。実際のオンライン対戦や秘密情報保護には対応していません。</p></div>{game ? <LocalGame key={revision} initial={game} onChange={setGame} /> : <Setup onStart={started => { setGame(started); setRevision(value => value + 1); }} />}<details className="debug-tools"><summary>検証用の盤面を開く</summary><p>少数の架空駒で動作を確かめます。現在のローカル対局は置き換わります。</p><div className="actions"><button className="secondary" onClick={() => demo('aircraft')}>飛行機のC/D経路</button><button className="secondary" onClick={() => demo('capture')}>司令部占領</button><button className="secondary" onClick={() => { setGame(null); setRevision(value => value + 1); }}>初期配置へ戻る</button></div></details></>
       : <section className="placeholder"><p className="eyebrow">ONLINE — 将来拡張</p><h1>{screen === 'list' ? '対局一覧' : '新しい対局'}</h1><p>オンライン対局・ログイン・招待は将来の拡張です。初回公開は対CPU戦を目標にします。</p><button className="primary" onClick={requestNewGame}>コンピューターと対戦</button></section>}
     </main>
-    <footer><a href="https://github.com/diceK9750/military-chess-online/blob/main/docs/GAME_RULES.md" target="_blank" rel="noreferrer">正式ゲームルール ↗</a><span>対コンピューター戦</span></footer>
+    <footer><a href="https://github.com/diceK9750/military-chess-online/blob/main/docs/GAME_RULES.md" target="_blank" rel="noreferrer">正式ゲームルール ↗</a><span>対コンピューター戦・テストプレイ版</span></footer>
   </div>;
 }
