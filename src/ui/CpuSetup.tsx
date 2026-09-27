@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { generateCpuPlacement } from '../cpu/placement';
 import type { Difficulty } from '../cpu/strategy';
 import { cpuDraftStore, type DraftStore } from '../dev/storage';
-import { defaultPlacement } from '../dev/fixtures';
+import { generateFormationPlacement } from '../formation/templates';
 import { territory } from '../game/board';
 import { startGame } from '../game/game';
 import { validatePlacement } from '../game/placement';
@@ -32,7 +32,7 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
   initialPieces?: readonly Piece[];
   onPlacementChange?(pieces: readonly Piece[]): boolean | void;
 }) {
-  const [pieces, setPieces] = useState<Piece[]>(() => initialPieces ? initialPieces.map(piece => ({ ...piece })) : store.load(1) ?? defaultPlacement(1));
+  const [pieces, setPieces] = useState<Piece[]>(() => initialPieces ? initialPieces.map(piece => ({ ...piece })) : store.load(1) ?? generateFormationPlacement(1, seed, 'human'));
   const [selected, setSelected] = useState<Site | null>(null);
   const [notice, setNotice] = useState('駒を選び、入れ替える地点を選んでください。');
   const selectedPiece = pieces.find(piece => piece.position === selected);

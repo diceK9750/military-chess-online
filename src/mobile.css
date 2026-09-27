@@ -17,6 +17,7 @@ main:focus, .save-confirm:focus, .confirm h3:focus { outline: none; }
 .board .cell.side-2 { border-top: 4px double #47627a; }
 .board .cell.entrance { border-left: 3px solid #8c722c; }
 .board .cell.selected { outline: 3px solid #134b40; outline-offset: -4px; }
+.board .cell.pending { outline: 3px solid #a5680e; outline-offset: -4px; }
 .board .cell.legal { box-shadow: inset 0 0 0 3px #a5680e; }
 .board .cell.last-from, .board .cell.last-to { border-style: dashed; border-color: #385563; }
 .board .cell.last-battle { border-color: #a44329; border-width: 3px; }

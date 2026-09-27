@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { scenario } from '../dev/fixtures';
@@ -10,8 +10,9 @@ import { LocalGame } from './LocalGame';
 import { CpuSetup } from './CpuSetup';
 import { Setup } from './Setup';
 import { defaultPlacement } from '../dev/fixtures';
+import { generateFormationPlacement } from '../formation/templates';
 import { applyMove, startGame } from '../game/game';
-import { createSavedMatch, MATCH_STORAGE_KEY, storeSavedMatch } from '../save/match';
+import { createSavedMatch, MATCH_STORAGE_KEY, SETUP_STORAGE_KEY, storeSavedMatch } from '../save/match';
 import { ExportPanel, ImportPanel } from './SaveFilePanels';
 
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
@@ -100,6 +101,95 @@ test('capture renders result and ends move entry', async () => {
   expect(screen.getByText('P1の勝利')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '確定して実行' })).not.toBeInTheDocument();
 });
+test('a second click on the pending destination uses the same move path only once', async () => {
+  const onChange = vi.fn();
+  render(<LocalGame initial={scenario('capture')} onChange={onChange} />); const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
+  const destination = screen.getByRole('button', { name: 'HQ-P2 空き' });
+  await user.click(destination);
+  expect(screen.getByText('0手')).toBeInTheDocument();
+  expect(destination).toHaveClass('pending');
+  expect(destination).toHaveAttribute('aria-description', expect.stringContaining('着手予定地点'));
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(destination);
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange.mock.calls[0][0].moveCount).toBe(1);
+  expect(onChange.mock.calls[0][0].result?.reason).toBe('HQ_CAPTURE');
+  expect(screen.getByRole('button', { name: 'HQ-P2 P1 大将' })).toBeDisabled();
+});
+test('rapid repeated confirmation events cannot commit the same turn twice', async () => {
+  const onChange = vi.fn();
+  render(<LocalGame initial={scenario('capture')} onChange={onChange} />); const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
+  const destination = screen.getByRole('button', { name: 'D7 空き' });
+  await user.click(destination);
+  act(() => { destination.click(); destination.click(); });
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange.mock.calls[0][0].moveCount).toBe(1);
+});
+test('a different destination, another own piece, or an illegal square never confirms the pending move', async () => {
+  const initial = scenario('capture');
+  const onChange = vi.fn();
+  render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'other-own', owner: 1, type: 'spy', position: 'E2' }] }} onChange={onChange} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
+  await user.click(screen.getByRole('button', { name: 'HQ-P2 空き' }));
+  await user.click(screen.getByRole('button', { name: 'D7 空き' }));
+  expect(screen.getByRole('button', { name: 'D7 空き' })).toHaveClass('pending');
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'B8 空き' }));
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'E2 P1 スパイ' }));
+  expect(screen.getByRole('button', { name: 'E2 P1 スパイ' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('button', { name: '確定して実行' })).not.toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+});
+test('ambiguous HQ lanes require a lane before re-click, then re-click confirms', async () => {
+  const onChange = vi.fn();
+  render(<LocalGame initial={scenario('aircraft')} onChange={onChange} />); const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
+  const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
+  await user.click(destination);
+  await user.click(destination);
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '確定して実行' })).toBeDisabled();
+  await user.click(screen.getByRole('radio', { name: 'C列を通る' }));
+  await user.click(destination);
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange.mock.calls[0][0].events.at(-1)).toMatchObject({ kind: 'MOVE', move: { lane: 'C' } });
+});
+test('a single legal HQ lane can confirm by re-click, and CPU turn cannot accept clicks', async () => {
+  const initial = scenario('aircraft');
+  const onChange = vi.fn();
+  const { unmount } = render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'block', owner: 2, type: 'spy', position: 'C4' }] }} onChange={onChange} />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
+  const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
+  await user.click(destination); await user.click(destination);
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange.mock.calls[0][0].events.at(-1)).toMatchObject({ kind: 'MOVE', move: { lane: 'D' } });
+  unmount();
+  render(<LocalGame initial={{ ...initial, turn: 2 }} mode="cpu" />);
+  expect(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' })).toBeDisabled();
+});
+
+test('a new CPU game saves a selected formation and reopening setup preserves its edited pieces', async () => {
+  render(<App />); const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: /コンピューターと対戦/ }));
+  await user.click(screen.getByRole('button', { name: /^かんたん/ }));
+  const saved = JSON.parse(localStorage.getItem(SETUP_STORAGE_KEY)!);
+  expect(saved.pieces).toEqual(generateFormationPlacement(1, saved.cpuSeed, 'human'));
+  const before = saved.pieces;
+  await user.click(screen.getByRole('button', { name: /B1 P1/ }));
+  await user.click(screen.getByRole('button', { name: /E1 P1/ }));
+  const edited = JSON.parse(localStorage.getItem(SETUP_STORAGE_KEY)!).pieces;
+  expect(edited).not.toEqual(before);
+  const editedLabel = screen.getByRole('button', { name: /^B1 P1/ }).getAttribute('aria-label');
+  cleanup(); render(<App />);
+  await user.click(screen.getByRole('button', { name: '続きから' }));
+  expect(JSON.parse(localStorage.getItem(SETUP_STORAGE_KEY)!).pieces).toEqual(edited);
+  expect(screen.getByRole('button', { name: /^B1 P1/ })).toHaveAttribute('aria-label', editedLabel);
+});
 test('draft swaps autosave, READY blocks edits, unlock restores, both ready starts', async () => {
   const onStart = vi.fn(); const save = vi.fn(() => true);
   render(<Setup onStart={onStart} store={{ load: () => null, save }} />); const user = userEvent.setup();
@@ -157,11 +247,12 @@ test('CPU setup shows all 23 pieces, legal exchanges and a specific forbidden-pl
   await user.click(screen.getByText('自軍の駒一覧・枚数を見る'));
   expect(container.querySelectorAll('.inventory-type')).toHaveLength(16);
   expect(container.querySelectorAll('.inventory-type button')).toHaveLength(23);
-  await user.click(screen.getByRole('button', { name: 'A2 P1 軍旗' }));
+  const flagSite = generateFormationPlacement(1, 2, 'human').find(piece => piece.type === 'flag')!.position;
+  await user.click(screen.getByRole('button', { name: `${flagSite} P1 軍旗` }));
   expect(container.querySelectorAll('.board .cell.legal').length).toBeGreaterThan(0);
   await user.click(screen.getByRole('button', { name: /B4 P1/ }));
   expect(screen.getByText(/地雷・軍旗は自軍の突破口入口/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'A2 P1 軍旗' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: `${flagSite} P1 軍旗` })).toHaveAttribute('aria-pressed', 'true');
   await user.click(screen.getByRole('button', { name: '選択を解除' }));
   expect(screen.getByRole('button', { name: 'この配置で確定' })).toBeEnabled();
 });
@@ -175,7 +266,7 @@ test('setup board and inventory show the same icon above every formal piece name
     ['mine', '地雷', '💣'], ['cavalry', '騎兵', '🐎'], ['spy', 'スパイ', '🕵️'], ['flag', '軍旗', '🚩'],
   ] as const;
   const { container } = render(<CpuSetup difficulty="easy" seed={2} onStart={vi.fn()} store={{ load: () => null, save: () => true }} />);
-  const placement = defaultPlacement(1);
+  const placement = generateFormationPlacement(1, 2, 'human');
   expect(container.querySelectorAll('.board .cell.side-1 .piece-face')).toHaveLength(23);
   for (const [type, name, icon] of expected) {
     const site = placement.find(piece => piece.type === type)?.position;

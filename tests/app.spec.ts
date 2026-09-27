@@ -92,6 +92,35 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   expect(errors).toEqual([]);
 });
 
+test('CPU formation can be edited and a second destination click confirms on mobile and desktop', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  const setup = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-setup:v1')!));
+  expect(setup.pieces).toHaveLength(23);
+  expect(new Set(setup.pieces.map((piece: { position: string }) => piece.position)).size).toBe(23);
+  await page.locator('[data-site="B1"]').click(); await page.locator('[data-site="E1"]').click();
+  const edited = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-setup:v1')!));
+  expect(edited.pieces).not.toEqual(setup.pieces);
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!).game.moveCount as number);
+  const own = page.locator('.board .cell.side-1');
+  let found = false;
+  for (let i = 0; i < await own.count(); i++) {
+    await own.nth(i).click();
+    if (await page.locator('.board .cell.legal:not(.hq)').count()) { found = true; break; }
+  }
+  expect(found).toBe(true);
+  await page.locator('.board .cell.legal:not(.hq)').first().click();
+  await expect(page.locator('.board .cell.pending')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '確定して実行' })).toBeEnabled();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!).game.moveCount)).toBe(before);
+  await page.locator('.board .cell.pending').click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!).game.moveCount), { timeout: 10000 }).toBeGreaterThan(before);
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+});
+
 test('CPU match auto-saves and resumes after reload and later moves', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: '続きから' })).toBeDisabled();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Difficulty } from './cpu/strategy';
-import { defaultPlacement, scenario } from './dev/fixtures';
-import { cpuDraftStore } from './dev/storage';
+import { scenario } from './dev/fixtures';
+import { generateFormationPlacement } from './formation/templates';
 import type { GameState, Piece } from './game/types';
 import { advanceSavedMatch, advanceSavedSetup, clearSavedMatch, clearSavedSetup, createSavedMatch, createSavedSetup, loadSavedMatch, loadSavedSetup, storeSavedMatch, storeSavedSetup, type SavedCpuMatch, type SavedCpuSetup } from './save/match';
 import { CpuSetup } from './ui/CpuSetup';
@@ -76,7 +76,7 @@ export default function App() {
     if (!clearSavedMatch() || !clearSavedSetup()) { setSaveError('現在の保存データを置き換えられません。ブラウザの保存設定を確認してください。'); return; }
     matchRef.current = null; setMatch(null); setSaveError('');
     const random = new Uint32Array(1); crypto.getRandomValues(random);
-    const nextSetup = createSavedSetup(cpuDraftStore.load(1) ?? defaultPlacement(1), level, random[0]);
+    const nextSetup = createSavedSetup(generateFormationPlacement(1, random[0], 'human'), level, random[0]);
     setupRef.current = nextSetup; setSetup(nextSetup);
     if (!storeSavedSetup(nextSetup)) setSaveError('初期配置をブラウザへ保存できませんでした。');
     setCpuSeed(random[0]); setDifficulty(level);

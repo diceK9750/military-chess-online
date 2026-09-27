@@ -54,6 +54,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const confirmRef = useRef<HTMLHeadingElement>(null);
+  const committedMoveCount = useRef<number | null>(null);
   const cpuThinking = mode === 'cpu' && game.turn === 2 && game.result === null;
   const moves = game.turn && !cpuThinking ? legalMoves(game.pieces, game.turn) : [];
   const targets = moves.filter(m => m.from === selected).map(m => m.to);
@@ -82,14 +83,15 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
       setSelected(selected === site ? null : site); setPending([]); setLane(undefined); setNotice('');
       return;
     }
+    if (pending.length && pending[0].to === site) { if (chosen) execute(); return; }
     const candidates = moves.filter(move => move.from === selected && move.to === site);
     if (candidates.length) { setPending(candidates); setLane(candidates.length === 1 ? candidates[0].lane : undefined); setNotice(''); return; }
     setNotice(selected ? 'ここへは移動できません。枠の付いた移動先を選んでください。' : '先に自分の駒を選んでください。');
   }
   const chosen = pending.find(move => move.lane === lane);
   function execute() {
-    if (!chosen) return;
-    try { const next = applyMove(game, chosen); setGame(next); onChange?.(next); setSelected(null); setPending([]); setLane(undefined); setError(''); setNotice(''); }
+    if (!chosen || cpuThinking || game.result || committedMoveCount.current === game.moveCount) return;
+    try { const next = applyMove(game, chosen); committedMoveCount.current = game.moveCount; setGame(next); onChange?.(next); setSelected(null); setPending([]); setLane(undefined); setError(''); setNotice(''); }
     catch { setError('この手は実行できません。駒と移動先を選び直してください。'); }
   }
   function cancel() { setSelected(null); setPending([]); setLane(undefined); setNotice('選択を解除しました。'); }
@@ -102,13 +104,14 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
     <div className="toolbar">{mode === 'debug' && <label>盤面の向き <select aria-label="盤面の向き" value={perspective} onChange={event => setPerspective(Number(event.target.value) as Player)}><option value="1">P1を下側</option><option value="2">P2を下側</option></select></label>}<span className="muted">戦闘なし {game.noncombatCount} / 50手</span></div>
     <p className="board-guide">上が{mode === 'cpu' ? 'コンピューター' : 'P2'}側、下が{mode === 'cpu' ? 'あなた' : 'P1'}側。B列・E列が突破口です。</p>
-    <Board pieces={game.pieces} perspective={mode === 'cpu' ? 1 : perspective} selected={selected} targets={targets} concealOwner={mode === 'cpu' && !game.result ? 2 : undefined} humanSide={mode === 'cpu' ? 1 : undefined} lastMove={latestMove?.kind === 'MOVE' ? latestMove.move : undefined} battleSite={latestMove?.kind === 'MOVE' && latestMove.battle ? latestMove.move.to : undefined} routeLane={pending.length ? lane : undefined} disabled={cpuThinking || !!game.result} onSelect={select} />
+    <Board pieces={game.pieces} perspective={mode === 'cpu' ? 1 : perspective} selected={selected} pendingSite={pending[0]?.to} targets={targets} concealOwner={mode === 'cpu' && !game.result ? 2 : undefined} humanSide={mode === 'cpu' ? 1 : undefined} lastMove={latestMove?.kind === 'MOVE' ? latestMove.move : undefined} battleSite={latestMove?.kind === 'MOVE' && latestMove.battle ? latestMove.move.to : undefined} routeLane={pending.length ? lane : undefined} disabled={cpuThinking || !!game.result} onSelect={select} />
     <div className="board-legend" aria-label="盤面の記号"><span>太枠＝選択中</span><span>金枠＝移動先</span><span>発／着＝直前の移動</span><span>戦＝戦闘地点</span></div>
     {pending.length > 0 ? <div className="confirm" aria-label="着手確認">
       <h3 ref={confirmRef} tabIndex={-1}>この手を実行しますか？</h3><p><strong>{selectedPiece ? PIECES[selectedPiece.type].label : '駒'}</strong>を <strong>{pending[0].from}</strong> から <strong>{pending[0].to}</strong> へ動かします。</p>
       {targetPiece && <p className="battle-warning">戦闘になります。相手の駒種類は分かりません。</p>}
       {pending.length === 2 && <fieldset><legend>通る列を選択</legend>{(['C', 'D'] as const).map(column => <label key={column}><input type="radio" name="lane" value={column} checked={lane === column} onChange={() => setLane(column)} />{column}列を通る</label>)}</fieldset>}
       {pending.length === 1 && lane && <p>{lane}列を通ります（合法な列を自動選択）。</p>}
+      {chosen && <p className="muted">移動先をもう一度押しても確定できます。</p>}
       <div className="actions"><button className="secondary" onClick={() => { setPending([]); setLane(undefined); }}>選び直す</button><button className="primary" disabled={!chosen} onClick={execute}>確定して実行</button></div>
     </div> : !game.result && <div className="move-prompt"><p className="notice" role="status">{cpuThinking ? 'コンピューターが考えています。' : notice || (selectedPiece ? `${PIECES[selectedPiece.type].label}（${selected}）を選択中。金枠の移動先を選んでください。` : '自分の駒を選ぶと、移動できる地点を金枠で表示します。')}</p>{selected && !cpuThinking && <button className="secondary" onClick={cancel}>選択を解除</button>}</div>}
     {error && <p role="alert">{error}</p>}
