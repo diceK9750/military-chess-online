@@ -2,6 +2,50 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
+test('board-first rule reference fits only in genuine spare space across seven viewports', async ({ page }) => {
+  await page.goto('/');
+  await page.getByText('開発用・将来の機能').click();
+  await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.getByText('検証用の盤面を開く', { exact: true }).click();
+  await page.getByRole('button', { name: '飛行機の高飛び' }).click();
+  const measurements = [];
+  for (const [width, height, shouldShow] of [
+    [390, 844, 0], [430, 932, 0], [844, 390, 0], [932, 430, 0],
+    [1024, 768, 0], [1280, 720, 1], [1440, 900, 1],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const measured = await page.evaluate(() => {
+      const board = document.querySelector('.board')!;
+      const reference = document.querySelector('.rule-reference') as HTMLElement;
+      const layout = document.querySelector('.play-layout-inner') as HTMLElement;
+      const boardRect = board.getBoundingClientRect();
+      const referenceRect = reference.getBoundingClientRect();
+      const shown = getComputedStyle(reference).display !== 'none';
+      const overlap = shown && boardRect.right > referenceRect.left && boardRect.left < referenceRect.right && boardRect.bottom > referenceRect.top && boardRect.top < referenceRect.bottom;
+      const previousLayout = layout.style.display;
+      reference.style.display = 'none'; layout.style.display = 'block';
+      const baseline = board.getBoundingClientRect();
+      reference.style.removeProperty('display'); layout.style.display = previousLayout;
+      return { boardWidth: boardRect.width, boardHeight: boardRect.height, baselineWidth: baseline.width, baselineHeight: baseline.height, shown, overlap, horizontalScroll: document.documentElement.scrollWidth > innerWidth };
+    });
+    measurements.push({ width, height, ...measured });
+    expect(measured.shown).toBe(Boolean(shouldShow));
+    expect(measured.horizontalScroll).toBe(false);
+    expect(measured.overlap).toBe(false);
+    expect(measured.boardWidth).toBeGreaterThanOrEqual(measured.baselineWidth);
+    expect(measured.boardHeight).toBeGreaterThanOrEqual(measured.baselineHeight);
+    await expect(page.locator('.board .cell').first()).toBeVisible();
+  }
+  await test.info().attach('rule-reference-layout.json', { body: Buffer.from(JSON.stringify(measurements, null, 2)), contentType: 'application/json' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('button', { name: 'D5 P1 飛行機' }).click();
+  await page.getByRole('button', { name: 'HQ-P2 P2 工兵' }).click();
+  await expect(page.getByRole('button', { name: '確定して実行' })).toBeEnabled();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'ルール早見表' })).toBeVisible();
+});
+
 test('setup → confirmed move, narrow layout, and rules link', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');

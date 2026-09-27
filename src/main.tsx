@@ -5,5 +5,6 @@ import './style.css';
 import './cpu.css';
 import './save.css';
 import './mobile.css';
+import './rule-reference.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

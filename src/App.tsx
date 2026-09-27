@@ -111,7 +111,7 @@ export default function App() {
     else activateMatch(next);
   }
 
-  return <div className="app-shell">
+  return <div className={`app-shell${screen === 'cpu-game' || screen === 'local' ? ' app-shell--playing' : ''}`}>
     <header><button className="brand" onClick={() => setScreen('home')}><span className="brand-mark">将</span><span>軍人将棋<small>MILITARY CHESS</small></span></button><span className="version">ひとり用</span></header>
     <main ref={mainRef} tabIndex={-1}>
       {saveError && <p role="alert" className="save-error">{saveError}</p>}
