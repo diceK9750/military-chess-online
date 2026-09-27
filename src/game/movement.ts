@@ -29,7 +29,8 @@ export function moveError(pieces: readonly Piece[], side: Player, move: Move): s
     const ability = actor.type === 'engineer' || (actor.type === 'aircraft' ? dx === 0 || (dy === 0 && Math.abs(dx) === 1) : distance === 1 || ((actor.type === 'tank' || actor.type === 'cavalry') && dx === 0 && dy === 2 * forward(side)));
     if (!ability) { reason = 'DISTANCE'; continue; }
     if (actor.type !== 'aircraft' && Math.min(a.y, b.y) <= 4 && Math.max(a.y, b.y) >= 5 && a.x !== 1 && a.x !== 4) { reason = 'BOUNDARY'; continue; }
-    const blocked = path.slice(1, -1).some(site => pieces.some(p => p.position === site && (actor.type !== 'aircraft' || p.owner !== side)));
+    // Aircraft fly over every intermediate piece; only their destination can trigger combat.
+    const blocked = actor.type !== 'aircraft' && path.slice(1, -1).some(site => pieces.some(p => p.position === site));
     if (blocked) { reason = 'BLOCKED'; continue; }
     return null;
   }

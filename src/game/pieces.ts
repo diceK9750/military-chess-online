@@ -1,6 +1,6 @@
 import type { PieceType } from './types';
 
-export const RULESET_VERSION = 'v0.1';
+export const RULESET_VERSION = 'v0.2';
 export const PIECES = {
   general: { label: '大将', count: 1, captures: true },
   lieutenantGeneral: { label: '中将', count: 1, captures: true },

@@ -36,6 +36,22 @@ test('secret-only opponent type swaps do not change observation or either CPU ch
   for (const difficulty of ['easy', 'normal'] as const) expect(chooseCpuMove(a, difficulty, 9750)).toEqual(chooseCpuMove(b, difficulty, 9750));
 });
 
+test('CPU can choose a high flight over an unknown enemy without using its hidden type', () => {
+  const pieces = [p('air', 'aircraft', 'D4', 2), p('middle', 'spy', 'D2', 1), p('landing', 'engineer', 'HQ-P1', 1), p('own-capturer', 'general', 'F7', 2), p('enemy-capturer', 'colonel', 'F2', 1)];
+  const game = state(pieces, 2);
+  const view = observeForCpu(game, 2);
+  const highFlight: Move = { from: 'D4', to: 'HQ-P1' };
+  expect(view.legalMoves).toContainEqual(highFlight);
+  const changed = state(pieces.map(piece => piece.id === 'middle' ? { ...piece, type: 'mine' as const } : piece), 2);
+  expect(observeForCpu(changed, 2)).toEqual(view);
+  for (const difficulty of ['easy', 'normal'] as const) expect(chooseCpuMove(observeForCpu(changed, 2), difficulty, 9750)).toEqual(chooseCpuMove(view, difficulty, 9750));
+  const seed = Array.from({ length: 1024 }, (_, index) => index).find(candidate => JSON.stringify(chooseCpuMove(view, 'easy', candidate)) === JSON.stringify(highFlight));
+  expect(seed).toBeDefined();
+  const next = playCpuTurn(game, 2, 'easy', seed!);
+  expect(next.events[0]).toMatchObject({ kind: 'MOVE', move: highFlight, battle: 'ATTACKER' });
+  expect(next.pieces.find(piece => piece.id === 'middle')!.position).toBe('D2');
+});
+
 for (const side of [1, 2] as const) for (const seed of [0, 1, 9750, 0xffffffff]) {
   test(`CPU ${side} placement seed ${seed} is legal, complete, deterministic`, () => {
     const placement = generateCpuPlacement(side, seed);

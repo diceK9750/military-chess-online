@@ -20,6 +20,40 @@ test('new game stores full initial and current state, then restores after reload
   expect(loadSavedMatch()).toEqual({ kind: 'valid', match });
 });
 
+test('v0.1 autosave is replay-validated and migrated to v0.2 without changing its board, history, or save format', () => {
+  const first = beginning();
+  const moved = advanceSavedMatch(first, applyMove(first.game, legalMoves(first.game.pieces, 1)[0]));
+  const legacy = copy(moved);
+  (legacy as { rulesetVersion: string }).rulesetVersion = 'v0.1';
+  (legacy.game as { rulesetVersion: string }).rulesetVersion = 'v0.1';
+  localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(legacy));
+  const loaded = loadSavedMatch();
+  expect(loaded).toEqual({ kind: 'valid', match: moved });
+  expect(moved.saveFormatVersion).toBe(1);
+  expect(moved.rulesetVersion).toBe('v0.2');
+  if (loaded.kind === 'valid') {
+    expect(storeSavedMatch(loaded.match)).toBe(true);
+    expect(JSON.parse(localStorage.getItem(MATCH_STORAGE_KEY)!).rulesetVersion).toBe('v0.2');
+  }
+  const mismatch = copy(legacy);
+  (mismatch.game as { rulesetVersion: string }).rulesetVersion = 'v0.2';
+  expect(() => validateSavedMatch(mismatch)).toThrow('INVALID_SAVE');
+});
+
+test('a v0.2 high flight over enemy pieces replays from full initial placements after saving', () => {
+  const p1 = defaultPlacement(1);
+  const aircraftSite = p1.find(piece => piece.type === 'aircraft')!.position;
+  const prepared = p1.map(piece => ({ ...piece, position: piece.position === aircraftSite ? 'D4' as const : piece.position === 'D4' ? aircraftSite : piece.position }));
+  const first = startGame(prepared, defaultPlacement(2), 1);
+  const match = createSavedMatch(first, 'normal', 9750);
+  const moved = applyMove(first, { from: 'D4', to: 'HQ-P2' });
+  expect(moved.pieces.find(piece => piece.position === 'D7' && piece.owner === 2)).toBeDefined();
+  expect(moved.events.at(-1)).toMatchObject({ kind: 'MOVE', battle: 'ATTACKER', move: { from: 'D4', to: 'HQ-P2' } });
+  const saved = advanceSavedMatch(match, moved);
+  expect(storeSavedMatch(saved)).toBe(true);
+  expect(loadSavedMatch()).toEqual({ kind: 'valid', match: saved });
+});
+
 test('setup draft stores difficulty, seed and every legal placement change for resume', () => {
   const pieces = defaultPlacement(1);
   const setup = createSavedSetup(pieces, 'normal', 9750);

@@ -48,6 +48,21 @@ test('HQ lanes remain canonical when rotated and result visible', async ({ page 
   await expect(page.getByText('P1の勝利', { exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('result.png'), fullPage: true });
 });
+test('D5 aircraft high flight shows HQ legal over D7 enemy and battles only on landing', async ({ page }) => {
+  await page.goto('/');
+  await page.getByText('開発用・将来の機能').click();
+  await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.getByText('検証用の盤面を開く', { exact: true }).click();
+  await page.getByRole('button', { name: '飛行機の高飛び' }).click();
+  await page.getByRole('button', { name: 'D5 P1 飛行機' }).click();
+  await expect(page.getByRole('button', { name: 'HQ-P2 P2 工兵' })).toHaveClass(/legal/);
+  await page.getByRole('button', { name: 'HQ-P2 P2 工兵' }).click();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('button', { name: 'D7 P2 スパイ' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
+  await expect(page.locator('.latest-event')).toContainText('HQ-P2：攻撃側勝利');
+  await expect(page.getByRole('heading', { name: 'P2の手番' })).toBeVisible();
+});
 test('configuration autosave survives reload but READY is not persisted', async ({ page }) => {
   await page.goto('/'); await page.getByText('開発用・将来の機能').click(); await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   const before = await page.locator('[data-site="B1"]').getAttribute('aria-label');
@@ -150,6 +165,38 @@ test('CPU match auto-saves and resumes after reload and later moves', async ({ p
   expect(after.game.events.filter((event: { kind: string; actor?: number }) => event.kind === 'MOVE' && event.actor === 2).length).toBeGreaterThan(before.game.events.filter((event: { kind: string; actor?: number }) => event.kind === 'MOVE' && event.actor === 2).length);
   await page.reload(); await page.getByRole('button', { name: '続きから' }).click();
   await expect(page.locator('.badge').first()).toContainText(String(after.game.moveCount));
+});
+
+test('a v0.1 browser match resumes under v0.2 after replay validation', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  await page.evaluate(() => {
+    const key = 'military-chess:cpu-match:v1';
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    saved.rulesetVersion = 'v0.1';
+    saved.game.rulesetVersion = 'v0.1';
+    localStorage.setItem(key, JSON.stringify(saved));
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: '続きから' })).toBeEnabled();
+  await page.getByRole('button', { name: '続きから' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+  const own = page.locator('.board .cell.side-1');
+  for (let i = 0; i < await own.count(); i++) {
+    await own.nth(i).click();
+    if (await page.locator('.board .cell.legal:not(.hq)').count()) break;
+  }
+  await page.locator('.board .cell.legal:not(.hq)').first().click();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!).rulesetVersion)).toBe('v0.2');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!));
+  expect(stored.localGameId).toBe(original.localGameId);
+  expect(stored.initialPlacements).toEqual(original.initialPlacements);
+  expect(stored.game.events.slice(0, original.game.events.length)).toEqual(original.game.events);
 });
 
 test('placement changes resume with selected difficulty and seed', async ({ page }) => {

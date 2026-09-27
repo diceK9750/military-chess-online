@@ -39,7 +39,7 @@ describe('movement and rotated P2 counterparts', () => {
   });
   for (const type of ['tank', 'cavalry', 'engineer', 'aircraft'] as const) for (const owner of [1, 2] as const) test(`${type} middle blocker ${owner}`, () => {
     const pieces = [actor(type, 'C2'), { id: 'block', owner, type: 'spy' as const, position: 'C3' as const }];
-    expect(moveError(pieces, 1, { from: 'C2', to: 'C4' }) === null).toBe(type === 'aircraft' && owner === 1);
+    expect(moveError(pieces, 1, { from: 'C2', to: 'C4' }) === null).toBe(type === 'aircraft');
   });
   test('friendly destination rejected, enemy destination allowed, wrong owner rejected', () => {
     const p = actor('general', 'B3'); const target = { ...actor('spy', 'B4'), id: 'target' };
@@ -49,12 +49,38 @@ describe('movement and rotated P2 counterparts', () => {
     expect(moveError([p], 1, { from: 'B3', to: 'G3' as Site })).toBe('INVALID_SITE');
   });
 });
+test('aircraft flies forward and backward over friendly, enemy, and mixed intermediate pieces', () => {
+  const obstacles = [
+    { id: 'friendly-a', owner: 1, type: 'mine', position: 'D3' },
+    { id: 'enemy', owner: 2, type: 'spy', position: 'D4' },
+    { id: 'friendly-b', owner: 1, type: 'flag', position: 'D5' },
+  ] as const satisfies readonly Piece[];
+  for (const selected of [obstacles.slice(0, 1), obstacles.slice(1, 2), obstacles]) {
+    expect(moveError([actor('aircraft', 'D2'), ...selected], 1, { from: 'D2', to: 'D6' })).toBeNull();
+    expect(moveError([actor('aircraft', 'D6'), ...selected], 1, { from: 'D6', to: 'D2' })).toBeNull();
+  }
+  expect(moveError([actor('aircraft', 'D2'), ...obstacles, { id: 'land', owner: 2, type: 'engineer', position: 'D6' }], 1, { from: 'D2', to: 'D6' })).toBeNull();
+  expect(moveError([actor('aircraft', 'D2'), ...obstacles, { id: 'land', owner: 1, type: 'engineer', position: 'D6' }], 1, { from: 'D2', to: 'D6' })).toBe('FRIENDLY_DESTINATION');
+  expect(moveError([actor('aircraft', 'D2')], 1, { from: 'D2', to: 'E2' })).toBeNull();
+  expect(moveError([actor('aircraft', 'D2')], 1, { from: 'D2', to: 'F2' })).toBe('DISTANCE');
+  expect(moveError([actor('aircraft', 'D4'), { id: 'block', owner: 2, type: 'spy', position: 'D5' }], 1, { from: 'D4', to: 'D6' })).toBeNull();
+  expect(moveError([actor('engineer', 'D2'), ...obstacles], 1, { from: 'D2', to: 'D4' })).toBe('BLOCKED');
+});
+
+test('D5 to enemy HQ stays legal over an enemy at D7, including the rotated P2 case', () => {
+  const pieces: Piece[] = [actor('aircraft', 'D5'), { id: 'middle', owner: 2, type: 'spy', position: 'D7' }, { id: 'landing', owner: 2, type: 'engineer', position: 'HQ-P2' }];
+  expect(legalMoves(pieces, 1)).toContainEqual({ from: 'D5', to: 'HQ-P2' });
+  expect(moveError(pieces, 1, { from: 'D5', to: 'HQ-P2' })).toBeNull();
+  const rotated = pieces.map(mirror);
+  expect(legalMoves(rotated, 2)).toContainEqual({ from: 'C4', to: 'HQ-P1' });
+  expect(moveError(rotated, 2, { from: 'C4', to: 'HQ-P1' })).toBeNull();
+});
 describe('HQ aircraft lanes', () => {
   for (const from of ['HQ-P1', 'HQ-P2'] as const) for (const lane of ['C', 'D'] as const) {
     const to = from === 'HQ-P1' ? 'HQ-P2' : 'HQ-P1';
     for (const row of [2, 3, 4, 5, 6, 7]) for (const owner of [1, 2] as const) test(`${from} ${lane}${row} blocker owner ${owner}`, () => {
       const p = actor('aircraft', from); const block = { id: 'block', type: 'spy' as const, owner, position: `${lane}${row}` as Site };
-      expect(moveError([p, block], 1, { from, to, lane }) === null).toBe(owner === 1);
+      expect(moveError([p, block], 1, { from, to, lane })).toBeNull();
       expect(moveError([p, block], 1, { from, to, lane: lane === 'C' ? 'D' : 'C' })).toBeNull();
     });
     test(`${from} ${lane} empty and enemy/friendly destination`, () => {
@@ -68,12 +94,12 @@ describe('HQ aircraft lanes', () => {
     const pieces = [actor('aircraft', 'HQ-P1'), { ...actor('spy', 'C3', 2), id: 'enemy' }];
     expect(moveError(pieces, 1, { from: 'HQ-P1', to: 'HQ-P2' })).toBe('LANE_REQUIRED');
     expect(moveError(pieces, 1, { from: 'HQ-P1', to: 'HQ-P2', lane: 'C-D' as 'C' })).toBe('LANE_REQUIRED');
-    expect(moveError(pieces, 1, { from: 'HQ-P1', to: 'HQ-P2', lane: 'C' })).toBe('BLOCKED');
+    expect(moveError(pieces, 1, { from: 'HQ-P1', to: 'HQ-P2', lane: 'C' })).toBeNull();
     expect(moveError(pieces, 1, { from: 'HQ-P1', to: 'C7', lane: 'D' })).toBe('UNEXPECTED_LANE');
   });
-  test('both lanes blocked has no HQ destination', () => {
+  test('enemy pieces on both intermediate lanes leave both HQ routes legal', () => {
     const pieces = [actor('aircraft', 'HQ-P1'), { ...actor('spy', 'C3', 2), id: 'c' }, { ...actor('mine', 'D7', 2), id: 'd' }];
-    expect(legalMoves(pieces, 1).filter(m => m.to === 'HQ-P2')).toHaveLength(0);
+    expect(legalMoves(pieces, 1).filter(m => m.to === 'HQ-P2')).toEqual([{ from: 'HQ-P1', to: 'HQ-P2', lane: 'C' }, { from: 'HQ-P1', to: 'HQ-P2', lane: 'D' }]);
   });
 });
 test('all kinds at every site have symmetric legal move sets', () => {

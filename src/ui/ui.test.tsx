@@ -81,14 +81,27 @@ test('move requires lane selection and explicit confirmation', async () => {
   expect(screen.getByRole('heading', { name: 'P2の手番' })).toBeInTheDocument();
   expect(screen.getAllByText(/（D列）：攻撃側勝利/)).toHaveLength(2);
 });
-test('single legal lane auto selected; cancel never moves', async () => {
+test('D5 aircraft shows enemy HQ as a legal destination over D7 enemy and battles only on landing', async () => {
+  render(<LocalGame initial={scenario('highFlight')} />); const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'D5 P1 飛行機' }));
+  const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
+  expect(destination).toHaveClass('legal');
+  await user.click(destination);
+  await user.click(screen.getByRole('button', { name: '確定して実行' }));
+  expect(screen.getByRole('button', { name: 'D7 P2 スパイ' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'P2の手番' })).toBeInTheDocument();
+  expect(screen.getAllByText(/HQ-P2：攻撃側勝利/)).toHaveLength(2);
+});
+test('an enemy on C lane no longer blocks it; cancel still never moves', async () => {
   const initial = scenario('aircraft');
   render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'block', owner: 2, type: 'spy', position: 'C4' }] }} />);
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 P2 工兵' }));
-  expect(screen.getByText(/D列を通ります/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '確定して実行' })).toBeEnabled();
+  expect(screen.getByRole('radio', { name: 'C列を通る' })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'D列を通る' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '確定して実行' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: '選び直す' }));
   expect(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' })).toBeInTheDocument();
 });
@@ -158,7 +171,7 @@ test('ambiguous HQ lanes require a lane before re-click, then re-click confirms'
   expect(onChange).toHaveBeenCalledOnce();
   expect(onChange.mock.calls[0][0].events.at(-1)).toMatchObject({ kind: 'MOVE', move: { lane: 'C' } });
 });
-test('a single legal HQ lane can confirm by re-click, and CPU turn cannot accept clicks', async () => {
+test('an enemy on C lane still requires a lane; D re-click works and CPU turn cannot accept clicks', async () => {
   const initial = scenario('aircraft');
   const onChange = vi.fn();
   const { unmount } = render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'block', owner: 2, type: 'spy', position: 'C4' }] }} onChange={onChange} />);
@@ -166,6 +179,9 @@ test('a single legal HQ lane can confirm by re-click, and CPU turn cannot accept
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
   await user.click(destination); await user.click(destination);
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('radio', { name: 'D列を通る' }));
+  await user.click(destination);
   expect(onChange).toHaveBeenCalledOnce();
   expect(onChange.mock.calls[0][0].events.at(-1)).toMatchObject({ kind: 'MOVE', move: { lane: 'D' } });
   unmount();

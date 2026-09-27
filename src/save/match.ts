@@ -5,6 +5,7 @@ import type { GameState, Piece } from '../game/types';
 import type { Difficulty } from '../cpu/strategy';
 
 export const SAVE_FORMAT_VERSION = 1;
+const LEGACY_RULESET_VERSION = 'v0.1';
 export const MATCH_STORAGE_KEY = 'military-chess:cpu-match:v1';
 export const SETUP_STORAGE_KEY = 'military-chess:cpu-setup:v1';
 export const MAX_SAVE_TEXT_LENGTH = 8 * 1024 * 1024;
@@ -68,6 +69,12 @@ export function validateSavedMatch(value: unknown): SavedCpuMatch {
   if (!record(value)) throw new SaveError('INVALID_SAVE');
   if (value.saveFormatVersion !== SAVE_FORMAT_VERSION) throw new SaveError('UNSUPPORTED_SAVE_FORMAT');
   if (!exactKeys(value, ['saveFormatVersion', 'rulesetVersion', 'localGameId', 'createdAt', 'savedAt', 'difficulty', 'humanSide', 'cpuSide', 'cpuSeed', 'stateVersion', 'initialPlacements', 'game'])) throw new SaveError('INVALID_SAVE');
+  // v0.1 moves remain legal under v0.2. Revalidate the complete replay before accepting a local migration.
+  if (value.rulesetVersion === LEGACY_RULESET_VERSION) {
+    if (!record(value.game) || value.game.rulesetVersion !== LEGACY_RULESET_VERSION) throw new SaveError('INVALID_SAVE');
+    value = { ...value, rulesetVersion: RULESET_VERSION, game: { ...value.game, rulesetVersion: RULESET_VERSION } };
+  }
+  if (!record(value)) throw new SaveError('INVALID_SAVE');
   if (value.rulesetVersion !== RULESET_VERSION) throw new SaveError('UNSUPPORTED_RULESET');
   if (typeof value.localGameId !== 'string' || !/^[0-9a-f]{32}$/.test(value.localGameId) || !validTime(value.createdAt) || !validTime(value.savedAt)) throw new SaveError('INVALID_SAVE');
   if (Date.parse(value.savedAt) < Date.parse(value.createdAt)) throw new SaveError('INVALID_SAVE');

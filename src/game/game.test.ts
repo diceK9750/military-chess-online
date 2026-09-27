@@ -68,6 +68,23 @@ test('aircraft HQ combat is not occupation; selected lane remains in event', () 
   expect(next.result).toBeNull(); expect(next.turn).toBe(2); expect(next.pieces.find(p => p.id === 'a')!.position).toBe('HQ-P2');
   expect(next.events[0]).toMatchObject({ move: { lane: 'D' }, battle: 'ATTACKER' });
 });
+test('aircraft lands on enemy HQ over D7 enemy, battles only the HQ defender, and does not occupy for victory', () => {
+  const input = state([p('air', 'aircraft', 'D5'), p('own-capturer', 'general', 'A2'), p('middle', 'spy', 'D7', 2), p('hq-defender', 'engineer', 'HQ-P2', 2), p('enemy-capturer', 'colonel', 'A7', 2)]);
+  const next = applyMove(input, { from: 'D5', to: 'HQ-P2' });
+  expect(next.pieces.find(piece => piece.id === 'middle')!.position).toBe('D7');
+  expect(next.pieces.find(piece => piece.id === 'hq-defender')!.position).toBeNull();
+  expect(next.pieces.find(piece => piece.id === 'air')!.position).toBe('HQ-P2');
+  expect(next.events[0]).toMatchObject({ kind: 'MOVE', battle: 'ATTACKER', move: { from: 'D5', to: 'HQ-P2' } });
+  expect(next.result).toBeNull();
+});
+test('P2 aircraft uses the rotated high flight into HQ-P1 with the intermediate enemy intact', () => {
+  const input = state([p('air', 'aircraft', 'C4', 2), p('middle', 'spy', 'C2'), p('hq-defender', 'engineer', 'HQ-P1'), p('own-capturer', 'general', 'F7', 2), p('enemy-capturer', 'colonel', 'F2')], { turn: 2, firstPlayer: 2 });
+  const next = applyMove(input, { from: 'C4', to: 'HQ-P1' });
+  expect(next.pieces.find(piece => piece.id === 'middle')!.position).toBe('C2');
+  expect(next.pieces.find(piece => piece.id === 'hq-defender')!.position).toBeNull();
+  expect(next.pieces.find(piece => piece.id === 'air')!.position).toBe('HQ-P1');
+  expect(next.result).toBeNull();
+});
 test('unqualified HQ visitor can exit through another port on later turn', () => {
   let game = state([...reserves, p('a', 'spy', 'C7')]);
   game = applyMove(game, { from: 'C7', to: 'HQ-P2' }); expect(game.result).toBeNull();

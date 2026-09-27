@@ -22,6 +22,18 @@ test('password-encrypted file round trips full match without plaintext password 
   expect(await decryptMatch(text, password)).toEqual(original);
 });
 
+test('a password backup containing a v0.1 match decrypts and migrates after replay validation', async () => {
+  const original = match();
+  const legacy = JSON.parse(JSON.stringify(original));
+  legacy.rulesetVersion = 'v0.1';
+  legacy.game.rulesetVersion = 'v0.1';
+  const password = testPassword();
+  const oldFile = await encryptMatch(legacy, password);
+  expect(JSON.parse(oldFile)).not.toHaveProperty('rulesetVersion');
+  expect(await decryptMatch(oldFile, password)).toEqual(original);
+  expect(oldFile).not.toContain('v0.1');
+});
+
 test('fresh salt and IV make repeated exports of one match different', async () => {
   const original = match();
   const password = testPassword();

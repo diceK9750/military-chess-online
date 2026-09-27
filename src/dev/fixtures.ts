@@ -13,7 +13,18 @@ export function defaultPlacement(side: Player): Piece[] {
   validatePlacement(pieces, side);
   return pieces;
 }
-export function scenario(name: 'aircraft' | 'capture'): GameState {
+export function scenario(name: 'aircraft' | 'capture' | 'highFlight'): GameState {
+  if (name === 'highFlight') return {
+    rulesetVersion: RULESET_VERSION,
+    pieces: [
+      { id: 'demo-air', owner: 1, type: 'aircraft', position: 'D5' },
+      { id: 'demo-own-general', owner: 1, type: 'general', position: 'A2' },
+      { id: 'demo-middle', owner: 2, type: 'spy', position: 'D7' },
+      { id: 'demo-hq', owner: 2, type: 'engineer', position: 'HQ-P2' },
+      { id: 'demo-enemy-colonel', owner: 2, type: 'colonel', position: 'A7' },
+    ],
+    firstPlayer: 1, turn: 1, moveCount: 0, noncombatCount: 0, result: null, events: [],
+  };
   const pieces: Piece[] = [
     { id: 'demo-1', owner: 1, type: name === 'aircraft' ? 'aircraft' : 'general', position: name === 'aircraft' ? 'HQ-P1' : 'C7' },
     { id: 'demo-2', owner: 2, type: 'colonel', position: 'A7' },
