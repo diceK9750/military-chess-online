@@ -2,48 +2,133 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-test('board-first rule reference fits only in genuine spare space across seven viewports', async ({ page }) => {
+test('wide play screen centers the board and keeps the shared rule panels beside it', async ({ page }) => {
+  await page.setViewportSize({ width: 2048, height: 1000 });
   await page.goto('/');
   await page.getByText('開発用・将来の機能').click();
   await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
   await page.getByText('検証用の盤面を開く', { exact: true }).click();
   await page.getByRole('button', { name: '飛行機の高飛び' }).click();
-  const measurements = [];
-  for (const [width, height, shouldShow] of [
-    [390, 844, 0], [430, 932, 0], [844, 390, 0], [932, 430, 0],
-    [1024, 768, 0], [1280, 720, 1], [1440, 900, 1],
-  ]) {
-    await page.setViewportSize({ width, height });
-    const measured = await page.evaluate(() => {
-      const board = document.querySelector('.board')!;
-      const reference = document.querySelector('.rule-reference') as HTMLElement;
-      const layout = document.querySelector('.play-layout-inner') as HTMLElement;
-      const boardRect = board.getBoundingClientRect();
-      const referenceRect = reference.getBoundingClientRect();
-      const shown = getComputedStyle(reference).display !== 'none';
-      const overlap = shown && boardRect.right > referenceRect.left && boardRect.left < referenceRect.right && boardRect.bottom > referenceRect.top && boardRect.top < referenceRect.bottom;
-      const previousLayout = layout.style.display;
-      reference.style.display = 'none'; layout.style.display = 'block';
-      const baseline = board.getBoundingClientRect();
-      reference.style.removeProperty('display'); layout.style.display = previousLayout;
-      return { boardWidth: boardRect.width, boardHeight: boardRect.height, baselineWidth: baseline.width, baselineHeight: baseline.height, shown, overlap, horizontalScroll: document.documentElement.scrollWidth > innerWidth };
-    });
-    measurements.push({ width, height, ...measured });
-    expect(measured.shown).toBe(Boolean(shouldShow));
-    expect(measured.horizontalScroll).toBe(false);
-    expect(measured.overlap).toBe(false);
-    expect(measured.boardWidth).toBeGreaterThanOrEqual(measured.baselineWidth);
-    expect(measured.boardHeight).toBeGreaterThanOrEqual(measured.baselineHeight);
-    await expect(page.locator('.board .cell').first()).toBeVisible();
-  }
-  await test.info().attach('rule-reference-layout.json', { body: Buffer.from(JSON.stringify(measurements, null, 2)), contentType: 'application/json' });
-  await page.setViewportSize({ width: 1280, height: 720 });
+  const geometry = await page.evaluate(() => {
+    const board = document.querySelector('.board')!.getBoundingClientRect();
+    const panels = [...document.querySelectorAll<HTMLElement>('.rule-reference')].filter(panel => getComputedStyle(panel).display !== 'none');
+    return { centerDelta: Math.abs(board.x + board.width / 2 - innerWidth / 2), pageHeight: document.documentElement.scrollHeight, viewportHeight: innerHeight, panelCount: panels.length, panelsFit: panels.every(panel => panel.scrollHeight <= panel.clientHeight + 2) };
+  });
+  expect(geometry.centerDelta).toBeLessThanOrEqual(8);
+  expect(geometry.pageHeight).toBeLessThanOrEqual(geometry.viewportHeight + 2);
+  expect(geometry.panelCount).toBe(2);
+  expect(geometry.panelsFit).toBe(true);
   await page.getByRole('button', { name: 'D5 P1 飛行機' }).click();
   await page.getByRole('button', { name: 'HQ-P2 P2 工兵' }).click();
   await expect(page.getByRole('button', { name: '確定して実行' })).toBeEnabled();
+  const confirmation = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2), confirmFits: document.querySelector('.confirm')!.getBoundingClientRect().bottom <= innerHeight }));
+  expect(confirmation.pageFits).toBe(true);
+  expect(confirmation.panelsFit).toBe(true);
+  expect(confirmation.confirmFits).toBe(true);
   await page.getByRole('button', { name: '確定して実行' }).click();
   await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'ルール早見表' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: '駒の強弱早見' })).toBeVisible();
+  const result = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
+  expect(result.pageFits).toBe(true);
+  expect(result.panelsFit).toBe(true);
+});
+
+test('three-column one-screen layout preserves both setup and play at ten viewports', async ({ page }) => {
+  const sizes = [[2048, 1000], [1920, 900], [1600, 900], [1440, 900], [1280, 720], [1024, 768], [932, 430], [844, 390], [430, 932], [390, 844]] as const;
+  const measurements: { state: string; size: string; [key: string]: unknown }[] = [];
+  await page.goto('/');
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+
+  async function inspect(state: 'setup' | 'play') {
+    for (const [width, height] of sizes) {
+      await page.setViewportSize({ width, height });
+      await page.evaluate(() => scrollTo(0, 0));
+      const result = await page.evaluate(({ width, height, state }) => {
+        const box = (element: Element | null) => {
+          if (!element) return null;
+          const r = element.getBoundingClientRect();
+          return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height), bottom: Math.round(r.bottom) };
+        };
+        const board = document.querySelector('.board')!;
+        const boardRect = board.getBoundingClientRect();
+        const references = [...document.querySelectorAll<HTMLElement>('.rule-reference')];
+        const visibleReferences = references.filter(element => getComputedStyle(element).display !== 'none');
+        const referenceBoxes = visibleReferences.map(element => ({ label: element.getAttribute('aria-label'), box: box(element), overflow: element.scrollHeight - element.clientHeight }));
+        const overlapsBoard = visibleReferences.some(element => {
+          const r = element.getBoundingClientRect();
+          return boardRect.right > r.left && boardRect.left < r.right && boardRect.bottom > r.top && r.bottom > boardRect.top;
+        });
+        const savedVisibility = references.map(element => element.style.visibility);
+        references.forEach(element => { element.style.visibility = 'hidden'; });
+        const baseline = box(board);
+        references.forEach((element, index) => { element.style.visibility = savedVisibility[index]; });
+        const control = state === 'setup' ? document.querySelector('.setup-screen .wide') : document.querySelector('.move-prompt') ?? document.querySelector('.confirm .primary');
+        const wideMode = width >= 1200 && height >= 800;
+        return {
+          board: box(board), baseline, boardCenterDelta: Math.round(boardRect.x + boardRect.width / 2 - innerWidth / 2),
+          references: referenceBoxes, referenceCount: visibleReferences.length, overlapsBoard,
+          horizontalScroll: document.documentElement.scrollWidth > innerWidth,
+          documentFits: document.documentElement.scrollHeight <= innerHeight + 2,
+          control: box(control), controlVisible: !!control && getComputedStyle(control).display !== 'none', wideMode,
+          referenceExpected: width >= 1400 && height >= 850,
+        };
+      }, { width, height, state });
+      measurements.push({ state, size: `${width}x${height}`, ...result });
+      expect(result.horizontalScroll, `${state} ${width}x${height} horizontal scroll`).toBe(false);
+      expect(Math.abs(result.boardCenterDelta), `${state} ${width}x${height} board center`).toBeLessThanOrEqual(4);
+      expect(result.referenceCount, `${state} ${width}x${height} rule columns`).toBe(result.referenceExpected ? 2 : 0);
+      expect(result.overlapsBoard).toBe(false);
+      expect((result.board as { width: number }).width).toBe((result.baseline as { width: number }).width);
+      expect((result.board as { height: number }).height).toBe((result.baseline as { height: number }).height);
+      expect(result.controlVisible).toBe(true);
+      if (result.wideMode) {
+        expect(result.documentFits, `${state} ${width}x${height} page fits`).toBe(true);
+        expect((result.control as { y: number }).y).toBeGreaterThanOrEqual(0);
+        expect((result.control as { bottom: number }).bottom).toBeLessThanOrEqual(height);
+        expect(result.references.every(reference => reference.overflow <= 2)).toBe(true);
+      }
+      await expect(page.locator('.board .cell').first()).toBeVisible();
+    }
+  }
+
+  await inspect('setup');
+  await page.setViewportSize({ width: 2048, height: 1000 });
+  const setupPieces = page.locator('.board .cell.side-1');
+  let placementFound = false;
+  for (let index = 0; index < await setupPieces.count(); index++) {
+    await setupPieces.nth(index).click();
+    if (await page.locator('.board .cell.legal').count()) { placementFound = true; break; }
+  }
+  expect(placementFound).toBe(true);
+  await page.locator('.board .cell.legal').first().click();
+  await expect(page.locator('.setup-screen .notice')).toContainText('入れ替え');
+  const setupConfirmation = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, confirmFits: document.querySelector('.setup-screen .wide')!.getBoundingClientRect().bottom <= innerHeight }));
+  expect(setupConfirmation.pageFits).toBe(true);
+  expect(setupConfirmation.confirmFits).toBe(true);
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await inspect('play');
+  await test.info().attach('three-column-layout.json', { body: Buffer.from(JSON.stringify(measurements, null, 2)), contentType: 'application/json' });
+
+  await page.setViewportSize({ width: 2048, height: 1000 });
+  const own = page.locator('.board .cell.side-1');
+  let found = false;
+  for (let index = 0; index < await own.count(); index++) {
+    await own.nth(index).click();
+    if (await page.locator('.board .cell.legal').count()) { found = true; break; }
+  }
+  expect(found).toBe(true);
+  await page.locator('.board .cell.legal').first().click();
+  await expect(page.getByRole('button', { name: '確定して実行' })).toBeVisible();
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: '駒の強弱早見' })).toBeVisible();
+  const afterCpuReply = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
+  expect(afterCpuReply.pageFits).toBe(true);
+  expect(afterCpuReply.panelsFit).toBe(true);
 });
 
 test('setup → confirmed move, narrow layout, and rules link', async ({ page }) => {
@@ -69,7 +154,7 @@ test('setup → confirmed move, narrow layout, and rules link', async ({ page })
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const cells = await page.locator('.cell').evaluateAll(els => els.map(e => ({ w: e.getBoundingClientRect().width, h: e.getBoundingClientRect().height })));
-    expect(cells.every(c => c.w >= 40 && c.h >= 44)).toBe(true);
+    expect(cells.every(c => c.w >= 40 && c.h >= 44), `${width}px cells: ${JSON.stringify(cells.slice(0, 8))}`).toBe(true);
   }
   expect(errors).toEqual([]);
 });

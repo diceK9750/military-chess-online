@@ -1,40 +1,107 @@
-.app-shell--playing { max-width: 1440px; }
-.play-layout { container: play-layout / inline-size; }
-.play-layout-inner { min-width: 0; }
-.play-main { width: min(100%, 820px); min-width: 0; margin-inline: auto; }
+.app-shell--playing, .app-shell--setup { max-width: 1920px; }
+.triple-layout { display: grid; grid-template-columns: minmax(0, 820px); justify-content: center; align-items: start; gap: 16px; min-width: 0; }
+.play-main, .setup-main { width: min(100%, 820px); min-width: 0; margin-inline: auto; }
 .rule-reference { display: none; }
 
-@media (min-height: 600px) {
-  @container play-layout (min-width: 1124px) {
-    .play-layout-inner { display: grid; grid-template-columns: 820px minmax(280px, 1fr); gap: 24px; align-items: start; }
-    .play-main { margin-inline: 0; }
-    .rule-reference { display: block; }
+.rule-reference {
+  width: min(100%, 420px);
+  min-width: 0;
+  padding: 10px 12px;
+  color: #42554a;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.rule-reference h3 { margin: 0 0 5px; font-size: 14px; line-height: 1.2; color: #294b3e; }
+.rule-reference h4 { margin: 0 0 3px; font-size: 12px; color: #294b3e; }
+.rule-reference p { margin: 0; }
+.rule-reference section { padding: 6px 0; border-bottom: 1px solid #dce3d7; }
+.rule-reference ul { margin: 2px 0 0; padding-left: 16px; }
+.rule-reference li { margin: 1px 0; }
+.rule-reference .rank-order { font-weight: 700; }
+.rule-reference .matchup-key { margin-bottom: 3px; }
+.matchup-row { display: grid; grid-template-columns: 3.8em minmax(0, 1fr); column-gap: 5px; padding: 3px 0; border-top: 1px solid #e2e7de; }
+.matchup-row > strong { grid-row: 1 / span 2; }
+.matchup-row > span { min-width: 0; overflow-wrap: anywhere; }
+.matchup-row b { display: inline-block; width: 1.3em; }
+.flag-rule { margin-top: 4px !important; }
+.rule-reference > a { display: inline-block; margin-top: 5px; }
+
+@media (min-width: 1200px) and (min-height: 800px) {
+  .app-shell--playing, .app-shell--setup {
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
+  .app-shell--playing > header, .app-shell--setup > header { flex: 0 0 56px; min-height: 56px; padding: 5px 0; }
+  .app-shell--playing > main, .app-shell--setup > main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 0;
+  }
+  .app-shell--playing > footer, .app-shell--setup > footer { flex: 0 0 34px; padding: 4px 0; align-items: center; }
+  .app-shell--playing .cpu-banner, .app-shell--setup .cpu-banner, .app-shell--playing .dev-banner, .app-shell--setup .dev-banner { flex: 0 0 auto; margin: 0 0 5px; padding: 5px 12px; font-size: 12px; line-height: 1.35; }
+  .app-shell--playing .cpu-banner p, .app-shell--setup .cpu-banner p, .app-shell--playing .dev-banner p, .app-shell--setup .dev-banner p { margin: 2px 0 0; }
+  .app-shell--playing .save-toolbar { flex: 0 0 42px; display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 3px; }
+  .app-shell--playing .save-toolbar .secondary { min-height: 38px; padding: 6px 14px; }
+  .app-shell--playing .game-screen, .app-shell--setup .setup-screen { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .app-shell--playing .game-screen > .section-heading { flex: 0 0 auto; margin: 0; }
+  .app-shell--playing .section-heading h2, .app-shell--setup .section-heading h2 { margin: 0; font-size: 18px; }
+  .app-shell--playing .section-heading .eyebrow, .app-shell--setup .section-heading .eyebrow { margin: 0 0 2px; font-size: 11px; }
+  .app-shell--playing .latest-event, .app-shell--playing .pass-event, .app-shell--playing .thinking, .app-shell--playing .result { flex: 0 0 auto; margin: 3px 0; padding: 5px 9px; font-size: 12px; line-height: 1.3; }
+  .app-shell--playing .result strong { font-size: 16px; }
+  .app-shell--playing .result .primary { min-height: 36px; margin: 3px 0 0; padding: 5px 12px; }
+  .triple-layout { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+  .play-main, .setup-main { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+  .app-shell--playing .play-layout, .app-shell--setup .setup-layout { margin-top: 3px; }
+  .app-shell--playing .toolbar { flex: 0 0 26px; min-height: 26px; margin: 0; gap: 6px; font-size: 12px; }
+  .app-shell--playing .toolbar .muted { margin: 0; font-size: 12px; }
+  .app-shell--playing .board-guide, .app-shell--setup .board-guide { flex: 0 0 auto; margin: 0; font-size: 12px; line-height: 1.3; }
+  .app-shell--playing .board, .app-shell--setup .board {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: min(100%, 820px);
+    margin: 0 auto;
+    display: grid;
+    grid-template-rows: auto repeat(8, minmax(0, 1fr));
+    gap: 2px;
+  }
+  .app-shell--playing .board .columns, .app-shell--setup .board .columns { margin: 0; font-size: 11px; line-height: 1; }
+  .app-shell--playing .board .board-row, .app-shell--setup .board .board-row { min-height: 0; margin: 0; gap: 3px; }
+  .app-shell--playing .board .board-row.border-row, .app-shell--setup .board .board-row.border-row { margin: 0; }
+  .app-shell--playing .board .cell, .app-shell--setup .board .cell { min-height: 0; height: 100%; padding: 1px; line-height: 1; }
+  .app-shell--playing .coordinate, .app-shell--setup .coordinate { font-size: 10px; }
+  .app-shell--playing .piece-icon, .app-shell--setup .piece-icon { font-size: 18px; }
+  .app-shell--playing .piece-name, .app-shell--setup .piece-name { font-size: 12px; }
+  .app-shell--playing .owner-label, .app-shell--setup .owner-label { font-size: 10px; }
+  .app-shell--playing .board-legend, .app-shell--setup .board-legend { flex: 0 0 auto; margin: 0; gap: 2px 8px; font-size: 11px; line-height: 1.2; }
+  .app-shell--playing .move-prompt, .app-shell--playing .confirm { flex: 0 0 auto; margin: 0; }
+  .app-shell--playing .move-prompt .notice, .app-shell--playing .confirm p { margin: 2px 0; padding: 5px 8px; font-size: 12px; line-height: 1.25; }
+  .app-shell--playing .confirm { padding: 6px 9px; }
+  .app-shell--playing .confirm h3 { margin: 0; font-size: 14px; }
+  .app-shell--playing .confirm .actions { gap: 6px; }
+  .app-shell--playing .confirm .actions button { min-height: 36px; padding: 4px 10px; font-size: 12px; }
+  .app-shell--playing .history { flex: 0 0 auto; margin: 2px 0 0; }
+  .app-shell--playing .history > summary { min-height: 32px; padding: 5px 0; font-size: 12px; }
+  .app-shell--setup .setup-main > .section-heading { flex: 0 0 auto; margin: 0; }
+  .app-shell--setup .setup-main > .muted { flex: 0 0 auto; margin: 0; font-size: 12px; line-height: 1.25; }
+  .app-shell--setup .setup-progress { flex: 0 0 auto; margin: 0; padding: 4px 8px; font-size: 12px; line-height: 1.2; }
+  .app-shell--setup .inventory { flex: 0 0 auto; margin: 0; }
+  .app-shell--setup .inventory > summary { min-height: 34px; padding: 5px 0; font-size: 12px; }
+  .app-shell--setup .setup-main > .notice { flex: 0 0 auto; margin: 0; padding: 4px 8px; font-size: 12px; line-height: 1.2; }
+  .app-shell--setup .setup-main > .wide { flex: 0 0 38px; width: 100%; min-height: 38px; margin: 0; padding: 4px 10px; }
+  .app-shell--setup .setup-footnote { font-size: 11px !important; }
+  .app-shell--setup .setup-main > .board-legend { margin: 0; }
 }
 
-.rule-reference {
-  max-width: 420px;
-  max-height: calc(100dvh - 32px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  position: sticky;
-  top: 16px;
-  padding: 14px 16px;
-  border: 1px solid #cbd4c5;
-  border-radius: 10px;
-  background: #f8f8f3;
-  color: #42554a;
-  font-size: .8rem;
-  line-height: 1.5;
+@media (min-width: 1400px) and (min-height: 850px) {
+  .triple-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 820px) minmax(0, 1fr); gap: 16px; }
+  .rule-reference { display: block; width: min(100%, 420px); min-height: 0; align-self: center; justify-self: center; }
 }
-.rule-reference h3 { margin: 0; font-size: 1rem; color: #294b3e; }
-.rule-reference h4 { margin: 0 0 5px; font-size: .88rem; color: #294b3e; }
-.rule-reference h5 { margin: 0 0 4px; font-size: .82rem; }
-.rule-reference section { padding: 10px 0; border-bottom: 1px solid #dce3d7; }
-.rule-reference p { margin: 0; }
-.rule-reference ul { margin: 4px 0; padding-left: 19px; }
-.rule-reference li { margin: 3px 0; }
-.rule-reference .rank-order { font-weight: 700; }
-.rule-reference .special-matchup { margin-top: 11px; }
-.rule-reference .special-matchup ul { margin: 1px 0 5px; }
-.rule-reference > a { display: inline-block; margin-top: 10px; }
+
+@media (min-width: 1200px) and (min-height: 800px) and (max-height: 850px) {
+  .app-shell--playing .board, .app-shell--setup .board { min-height: 220px; }
+}

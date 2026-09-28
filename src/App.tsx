@@ -111,7 +111,8 @@ export default function App() {
     else activateMatch(next);
   }
 
-  return <div className={`app-shell${screen === 'cpu-game' || screen === 'local' ? ' app-shell--playing' : ''}`}>
+  const wideScreenClass = screen === 'cpu-game' || screen === 'local' && game !== null ? ' app-shell--playing' : screen === 'cpu-setup' || screen === 'local' && game === null ? ' app-shell--setup' : '';
+  return <div className={`app-shell${wideScreenClass}`}>
     <header><button className="brand" onClick={() => setScreen('home')}><span className="brand-mark">将</span><span>軍人将棋<small>MILITARY CHESS</small></span></button><span className="version">ひとり用</span></header>
     <main ref={mainRef} tabIndex={-1}>
       {saveError && <p role="alert" className="save-error">{saveError}</p>}

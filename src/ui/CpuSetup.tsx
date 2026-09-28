@@ -10,6 +10,7 @@ import { PIECES, PIECE_TYPES } from '../game/pieces';
 import { RuleError, type GameState, type Piece, type Site } from '../game/types';
 import { Board } from './Board';
 import { PieceFace } from './PieceFace';
+import { RuleReference } from './RuleReference';
 
 function exchange(pieces: readonly Piece[], from: Site, to: Site): Piece[] {
   return pieces.map(piece => ({ ...piece, position: piece.position === from ? to : piece.position === to ? from : piece.position }));
@@ -69,7 +70,9 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
     onStart(startGame(pieces, cpuPieces, seed % 2 === 0 ? 1 : 2));
   }
 
-  return <section className="setup-screen">
+  return <section className="setup-screen"><div className="triple-layout setup-layout">
+    <RuleReference side="left" placement />
+    <div className="setup-main">
     <div className="section-heading"><div><p className="eyebrow">01 / 初期配置</p><h2>あなたの陣形</h2></div><span className="badge">{placed} / 23枚配置済み</span></div>
     <p className="muted">難易度：{difficulty === 'easy' ? 'かんたん' : 'ふつう'}。23地点は最初から埋まっています。駒を2枚選ぶと配置を交換できます。</p>
     <p className="setup-progress" role="status">{valid ? '✓ 配置完了。この配置で対局を始められます。' : `配置中：${placed} / 23枚`}</p>
@@ -83,6 +86,8 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
       return <div key={type} className="inventory-type"><PieceFace type={type} /><strong>{group.filter(piece => piece.position).length}/{PIECES[type].count}枚</strong><span>残り {PIECES[type].count - group.filter(piece => piece.position).length}枚</span><div>{group.map(piece => <button key={piece.id} className="secondary" aria-pressed={selected === piece.position} onClick={() => piece.position && select(piece.position)}>{piece.position ?? '未配置'}</button>)}</div></div>;
     })}</div></details>
     <button className="primary wide" disabled={!valid} onClick={confirm}>この配置で確定</button>
-    <p className="muted">地雷・軍旗は突破口入口へ置けません。軍旗は最後列にも置けません。変更した配置は自動保存され、「続きから」再開できます。</p>
-  </section>;
+    <p className="muted setup-footnote">配置は自動保存され、「続きから」再開できます。</p>
+    </div>
+    <RuleReference side="right" />
+  </div></section>;
 }

@@ -103,7 +103,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     {cpuThinking && <p className="thinking" role="status">コンピューターが考えています。盤面は着手後に操作できます。</p>}
     {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
     {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
-    <div className="play-layout"><div className="play-layout-inner"><div className="play-main">
+    <div className="triple-layout play-layout"><RuleReference side="left" /><div className="play-main">
     <div className="toolbar">{mode === 'debug' && <label>盤面の向き <select aria-label="盤面の向き" value={perspective} onChange={event => setPerspective(Number(event.target.value) as Player)}><option value="1">P1を下側</option><option value="2">P2を下側</option></select></label>}<span className="muted">戦闘なし {game.noncombatCount} / 50手</span></div>
     <p className="board-guide">上が{mode === 'cpu' ? 'コンピューター' : 'P2'}側、下が{mode === 'cpu' ? 'あなた' : 'P1'}側。B列・E列が突破口です。</p>
     <Board pieces={game.pieces} perspective={mode === 'cpu' ? 1 : perspective} selected={selected} pendingSite={pending[0]?.to} targets={targets} concealOwner={mode === 'cpu' && !game.result ? 2 : undefined} humanSide={mode === 'cpu' ? 1 : undefined} lastMove={latestMove?.kind === 'MOVE' ? latestMove.move : undefined} battleSite={latestMove?.kind === 'MOVE' && latestMove.battle ? latestMove.move.to : undefined} routeLane={pending.length ? lane : undefined} disabled={cpuThinking || !!game.result} onSelect={select} />
@@ -117,7 +117,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
       <div className="actions"><button className="secondary" onClick={() => { setPending([]); setLane(undefined); }}>選び直す</button><button className="primary" disabled={!chosen} onClick={execute}>確定して実行</button></div>
     </div> : !game.result && <div className="move-prompt"><p className="notice" role="status">{cpuThinking ? 'コンピューターが考えています。' : notice || (selectedPiece ? `${PIECES[selectedPiece.type].label}（${selected}）を選択中。金枠の移動先を選んでください。` : '自分の駒を選ぶと、移動できる地点を金枠で表示します。')}</p>{selected && !cpuThinking && <button className="secondary" onClick={cancel}>選択を解除</button>}</div>}
     {error && <p role="alert">{error}</p>}
-    </div><RuleReference /></div></div>
+    </div><RuleReference side="right" /></div>
     <details className="history" aria-label="対局履歴"><summary>対局履歴（{game.events.length}件）</summary><ol>{game.events.map((event, index) => <li key={index}>{eventText(event, mode)}</li>)}</ol>{!game.events.length && <p>検証用の盤面です。駒を選んで開始できます。</p>}</details>
     {game.result && mode === 'cpu' && initialPlacements && <details className="postgame"><summary>終局後の全駒・初期配置・戦闘を確認</summary><p>この対局は終了したため、両軍の情報を表示します。</p>{([1, 2] as const).map(side => <div key={side}><h3>{side === 1 ? 'あなた' : 'コンピューター'}の初期配置</h3><ul>{initialPlacements[side === 1 ? 'p1' : 'p2'].map(piece => <li key={piece.id}>{piece.position}：{PIECES[piece.type].label}</li>)}</ul></div>)}<h3>戦闘の双方の駒種類</h3><ol>{battleDisclosures(game.events, [...initialPlacements.p1, ...initialPlacements.p2]).map((line, index) => <li key={index}>{line}</li>)}</ol><p>全着手は上の対局履歴で確認できます。</p></details>}
   </section>;
