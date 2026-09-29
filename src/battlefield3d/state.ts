@@ -1,0 +1,36 @@
+import { SITES, anchors } from '../game/board';
+import type { GameState, PieceType, Player, Site } from '../game/types';
+
+export type BattlefieldPiece = { readonly owner: Player; readonly position: Site } & (
+  { readonly unknown: true } | { readonly unknown: false; readonly type: PieceType }
+);
+export interface BattlefieldViewState {
+  readonly viewer: Player;
+  readonly moveCount: number;
+  readonly finished: boolean;
+  readonly pieces: readonly BattlefieldPiece[];
+  readonly lastMove: { readonly from: Site; readonly to: Site } | null;
+}
+
+/** Copy allowlisted fields; never retain original objects or internal IDs. */
+export function toBattlefieldView(game: GameState, viewer: Player): BattlefieldViewState {
+  const last = [...game.events].reverse().find(event => event.kind === 'MOVE');
+  const pieces: BattlefieldPiece[] = [];
+  // Site order removes correlations with internal IDs and placement order.
+  for (const position of SITES) {
+    const piece = game.pieces.find(candidate => candidate.position === position);
+    if (!piece) continue;
+    pieces.push(piece.owner === viewer || game.result !== null
+      ? { owner: piece.owner, position, unknown: false, type: piece.type }
+      : { owner: piece.owner, position, unknown: true });
+  }
+  return { viewer, moveCount: game.moveCount, finished: game.result !== null, pieces,
+    lastMove: last ? { from: last.move.from, to: last.move.to } : null };
+}
+
+/** P1 is toward +Z; HQ has a single center at X=0. This is display geometry only. */
+export function sitePoint(site: Site): { x: number; z: number } {
+  const points = anchors(site);
+  return { x: points.reduce((sum, point) => sum + point.x, 0) / points.length - 2.5, z: 4.5 - points[0].y };
+}
+export const BRIDGES = [{ from: 'B4', to: 'B5' }, { from: 'E4', to: 'E5' }] as const;

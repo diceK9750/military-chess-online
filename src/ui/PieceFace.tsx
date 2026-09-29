@@ -1,7 +1,7 @@
 import { PIECES } from '../game/pieces';
 import type { PieceType } from '../game/types';
 
-const PIECE_ICONS = {
+export const PIECE_ICONS = {
   general: '⭐',
   lieutenantGeneral: '⭐',
   majorGeneral: '⭐',

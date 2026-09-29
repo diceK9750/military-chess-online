@@ -1,0 +1,27 @@
+.battlefield-actions { display: flex; align-items: center; gap: 8px; }
+.battlefield-launch { font-size: 12px; min-height: 36px; padding: 6px 10px; white-space: nowrap; }
+.battlefield-dialog { position: fixed; inset: 0; width: min(1320px, calc(100vw - 32px)); height: min(940px, calc(100dvh - 32px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid #536565; border-radius: 18px; background: #172a30; color: #f1ede0; box-shadow: 0 24px 100px #0009; overflow: hidden; }
+.battlefield-dialog[open] { display: flex; flex-direction: column; }
+.battlefield-dialog::backdrop { background: #07151adb; }
+.battlefield-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 8px; }
+.battlefield-header h2 { margin: 0; font-size: 23px; }
+.battlefield-kicker { color: #afc9b1; font-size: 10px; letter-spacing: .16em; margin: 0 0 5px; }
+.battlefield-dialog button { min-height: 44px; border: 1px solid #70817a; background: #283e42; color: #fff8e6; border-radius: 8px; padding: 8px 12px; white-space: nowrap; }
+.battlefield-intro { font-size: 12px; color: #b7c7c6; margin: 0; padding: 0 24px 12px; }
+.battlefield-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #24383d; }
+.battlefield-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.battlefield-status { position: absolute; inset: 0; display: grid; place-content: center; padding: 24px; margin: 0; text-align: center; }
+.battlefield-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 24px; }
+.battlefield-footer strong, .battlefield-footer span { display: block; font-size: 12px; }
+.battlefield-footer span { margin-top: 5px; color: #b7c7c6; font-size: 11px; }
+.battlefield-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 600px) {
+  .battlefield-dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); border-radius: 12px; }
+  .battlefield-header { padding: 12px 12px 8px; gap: 6px; }
+  .battlefield-header h2 { font-size: 17px; }
+  .battlefield-header button { font-size: 11px; padding: 8px; }
+  .battlefield-intro { padding: 0 12px 10px; font-size: 11px; }
+  .battlefield-footer { padding: 10px 12px; }
+  .battlefield-footer span { max-width: 210px; }
+  .battlefield-footer button { font-size: 12px; }
+}

@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BattlefieldView } from '../battlefield3d/BattlefieldView';
+import { toBattlefieldView } from '../battlefield3d/state';
 import { playCpuTurn } from '../cpu/turn';
 import type { Difficulty } from '../cpu/strategy';
 import { applyMove } from '../game/game';
@@ -48,6 +50,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
   initialPlacements?: { readonly p1: readonly Piece[]; readonly p2: readonly Piece[] }; onNewGame?(): void;
 }) {
   const [game, setGame] = useState(initial);
+  const battlefield = useMemo(() => toBattlefieldView(game, 1), [game]);
   const [perspective, setPerspective] = useState<Player>(1);
   const [selected, setSelected] = useState<Site | null>(null);
   const [pending, setPending] = useState<Move[]>([]);
@@ -98,7 +101,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
   function cancel() { setSelected(null); setPending([]); setLane(undefined); setNotice('選択を解除しました。'); }
   const resultLabel = game.result ? game.result.winner ? mode === 'cpu' ? game.result.winner === 1 ? 'あなたの勝利' : 'あなたの敗北' : `P${game.result.winner}の勝利` : '引き分け' : null;
   return <section className="game-screen">
-    <div className="section-heading"><div><p className="eyebrow">02 / {mode === 'cpu' ? '対CPU戦' : '開発用対局'}</p><h2>{game.result ? '対局終了' : cpuThinking ? 'CPUの手番' : mode === 'cpu' ? 'あなたの手番' : `P${game.turn}の手番`}</h2></div><span className="badge">{game.moveCount}手</span></div>
+    <div className="section-heading"><div><p className="eyebrow">02 / {mode === 'cpu' ? '対CPU戦' : '開発用対局'}</p><h2>{game.result ? '対局終了' : cpuThinking ? 'CPUの手番' : mode === 'cpu' ? 'あなたの手番' : `P${game.turn}の手番`}</h2></div><div className="battlefield-actions">{mode === 'cpu' && <BattlefieldView state={battlefield} />}<span className="badge">{game.moveCount}手</span></div></div>
     {game.result && <div role="status" className="result"><strong>{resultLabel}</strong><p>終局理由：{reasonText(game.result, mode)}</p>{mode === 'cpu' && onNewGame && <button className="primary" onClick={onNewGame}>新しい対局</button>}</div>}
     {cpuThinking && <p className="thinking" role="status">コンピューターが考えています。盤面は着手後に操作できます。</p>}
     {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
