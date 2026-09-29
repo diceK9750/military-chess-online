@@ -6,5 +6,6 @@ import './cpu.css';
 import './save.css';
 import './mobile.css';
 import './rule-reference.css';
+import './battlefield3d/battlefield.css';
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

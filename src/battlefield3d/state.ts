@@ -10,10 +10,24 @@ export interface BattlefieldViewState {
   readonly finished: boolean;
   readonly pieces: readonly BattlefieldPiece[];
   readonly lastMove: { readonly from: Site; readonly to: Site } | null;
+  readonly interaction: BattlefieldInteraction;
 }
+export interface BattlefieldInteraction {
+  readonly selectedSite: Site | null;
+  readonly legalTargets: readonly Site[];
+  readonly pendingSite: Site | null;
+  readonly laneCandidates: readonly ('C' | 'D')[];
+  readonly selectedLane: 'C' | 'D' | undefined;
+  readonly interactionEnabled: boolean;
+}
+export interface BattlefieldHandlers {
+  onSiteSelect(site: Site): void;
+  onLaneSelect(lane: 'C' | 'D'): void;
+}
+const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };
 
 /** Copy allowlisted fields; never retain original objects or internal IDs. */
-export function toBattlefieldView(game: GameState, viewer: Player): BattlefieldViewState {
+export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle): BattlefieldViewState {
   const last = [...game.events].reverse().find(event => event.kind === 'MOVE');
   const pieces: BattlefieldPiece[] = [];
   // Site order removes correlations with internal IDs and placement order.
@@ -25,7 +39,9 @@ export function toBattlefieldView(game: GameState, viewer: Player): BattlefieldV
       : { owner: piece.owner, position, unknown: true });
   }
   return { viewer, moveCount: game.moveCount, finished: game.result !== null, pieces,
-    lastMove: last ? { from: last.move.from, to: last.move.to } : null };
+    lastMove: last ? { from: last.move.from, to: last.move.to } : null,
+    interaction: { selectedSite: interaction.selectedSite, legalTargets: [...interaction.legalTargets], pendingSite: interaction.pendingSite,
+      laneCandidates: [...interaction.laneCandidates], selectedLane: interaction.selectedLane, interactionEnabled: interaction.interactionEnabled && !game.result } };
 }
 
 /** P1 is toward +Z; HQ has a single center at X=0. This is display geometry only. */

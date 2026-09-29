@@ -1,27 +1,39 @@
-.battlefield-actions { display: flex; align-items: center; gap: 8px; }
-.battlefield-launch { font-size: 12px; min-height: 36px; padding: 6px 10px; white-space: nowrap; }
-.battlefield-dialog { position: fixed; inset: 0; width: min(1320px, calc(100vw - 32px)); height: min(940px, calc(100dvh - 32px)); max-width: none; max-height: none; margin: auto; padding: 0; border: 1px solid #536565; border-radius: 18px; background: #172a30; color: #f1ede0; box-shadow: 0 24px 100px #0009; overflow: hidden; }
-.battlefield-dialog[open] { display: flex; flex-direction: column; }
-.battlefield-dialog::backdrop { background: #07151adb; }
-.battlefield-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 24px 8px; }
-.battlefield-header h2 { margin: 0; font-size: 23px; }
-.battlefield-kicker { color: #afc9b1; font-size: 10px; letter-spacing: .16em; margin: 0 0 5px; }
-.battlefield-dialog button { min-height: 44px; border: 1px solid #70817a; background: #283e42; color: #fff8e6; border-radius: 8px; padding: 8px 12px; white-space: nowrap; }
-.battlefield-intro { font-size: 12px; color: #b7c7c6; margin: 0; padding: 0 24px 12px; }
-.battlefield-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #24383d; }
+.game-surfaces { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.battlefield-panel { position: relative; order: -1; min-width: 0; display: flex; flex-direction: column; color: #f1ede0; background: #172a30; border-radius: 12px; overflow: hidden; }
+.battlefield-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; }
+.battlefield-header strong { font-size: 14px; }
+.battlefield-header small { font-size: 11px; color: #bed1c4; }
+.battlefield-panel button { min-height: 36px; border: 1px solid #70817a; background: #283e42; color: #fff8e6; border-radius: 8px; padding: 5px 10px; font-size: 12px; }
+.battlefield-panel button[aria-pressed="true"] { background: #76632e; outline: 2px solid #efd685; }
+.battlefield-stage { position: relative; height: clamp(280px, 40vh, 380px); min-height: 0; overflow: hidden; background: #24383d; }
 .battlefield-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-.battlefield-status { position: absolute; inset: 0; display: grid; place-content: center; padding: 24px; margin: 0; text-align: center; }
-.battlefield-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 24px; }
-.battlefield-footer strong, .battlefield-footer span { display: block; font-size: 12px; }
-.battlefield-footer span { margin-top: 5px; color: #b7c7c6; font-size: 11px; }
+.battlefield-status { position: absolute; inset: 0; display: grid; place-content: center; padding: 16px; margin: 0; text-align: center; font-size: 13px; }
+.battlefield-guide { display: flex; flex-direction: column; padding: 6px 12px 0; font-size: 10px; color: #b7c7c6; }
+.battlefield-selection { padding: 4px 12px 8px; margin: 0; font-size: 12px; }
+.battlefield-lanes { display: flex; gap: 8px; padding: 4px 12px; }
 .battlefield-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media (max-width: 600px) {
-  .battlefield-dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); border-radius: 12px; }
-  .battlefield-header { padding: 12px 12px 8px; gap: 6px; }
-  .battlefield-header h2 { font-size: 17px; }
-  .battlefield-header button { font-size: 11px; padding: 8px; }
-  .battlefield-intro { padding: 0 12px 10px; font-size: 11px; }
-  .battlefield-footer { padding: 10px 12px; }
-  .battlefield-footer span { max-width: 210px; }
-  .battlefield-footer button { font-size: 12px; }
+.battlefield-error .battlefield-stage { height: 80px; flex: 0 0 80px; }
+@media (min-width: 1100px) {
+  .play-layout.triple-layout { grid-template-columns: minmax(0, 1fr); }
+  .game-surfaces { display: grid; grid-template-columns: minmax(460px, 1.1fr) minmax(340px, 1fr); gap: 14px; min-height: 0; }
+  .battlefield-panel { order: 0; }
+  .battlefield-stage { flex: 1; height: auto; min-height: 300px; }
+}
+@media (min-width: 1200px) and (min-height: 800px) {
+  .game-surfaces { height: 100%; }
+  .battlefield-stage { min-height: 0; }
+  .app-shell--playing .game-surfaces .piece-icon { font-size: 16px; line-height: 1; }
+  .app-shell--playing .game-surfaces .owner-label { font-size: 9px; line-height: 1; }
+  .app-shell--playing .game-surfaces .coordinate { font-size: 9px; line-height: 1; }
+}
+@media (min-width: 1400px) and (min-height: 850px) {
+  .play-layout.triple-layout { grid-template-columns: minmax(180px, .65fr) minmax(820px, 3fr) minmax(180px, .65fr); gap: 12px; }
+  .play-layout .rule-reference { padding: 6px; font-size: 11px; }
+  .play-layout .matchup-row { grid-template-columns: 3.4em minmax(0, 1fr); font-size: 10px; }
+}
+@media (min-width: 1200px) and (min-height: 800px) and (max-height: 950px) {
+  .app-shell--playing .game-surfaces .cell { justify-content: center; }
+  .app-shell--playing .game-surfaces .piece-face { flex-direction: row; gap: 3px; }
+  .app-shell--playing .game-surfaces .coordinate { position: absolute; top: 1px; left: 3px; }
+  .app-shell--playing .game-surfaces .owner-label { position: absolute; bottom: 1px; right: 3px; }
 }

@@ -15,6 +15,9 @@ import { applyMove, startGame } from '../game/game';
 import { createSavedMatch, MATCH_STORAGE_KEY, SETUP_STORAGE_KEY, storeSavedMatch } from '../save/match';
 import { ExportPanel, ImportPanel } from './SaveFilePanels';
 
+// WebGL itself is covered in browser tests; keep these existing 2D regression tests in jsdom.
+vi.mock('../battlefield3d/renderer', () => ({ createBattlefield: () => ({ update() {}, reset() {}, dispose() {} }) }));
+
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 test('title offers disabled resume, import, and instructions when no match is saved', async () => {
   render(<App />);

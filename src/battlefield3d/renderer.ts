@@ -4,7 +4,9 @@ import { SITES } from '../game/board';
 import { PIECES } from '../game/pieces';
 import { PIECE_ICONS } from '../ui/PieceFace';
 import { BRIDGES, sitePoint } from './state';
-import type { BattlefieldViewState } from './state';
+import type { BattlefieldHandlers, BattlefieldViewState } from './state';
+import type { Site } from '../game/types';
+import { TapGesture } from './gesture';
 
 export interface BattlefieldRenderer {
   update(state: BattlefieldViewState): void;
@@ -13,7 +15,7 @@ export interface BattlefieldRenderer {
 }
 
 /** Render-only adapter: no GameState, IDs, legal moves, CPU, or persistence. */
-export function createBattlefield(host: HTMLElement, initial: BattlefieldViewState, onFailure: () => void): BattlefieldRenderer {
+export function createBattlefield(host: HTMLElement, initial: BattlefieldViewState, onFailure: () => void, handlers: BattlefieldHandlers): BattlefieldRenderer {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('webgl2', { antialias: true, alpha: false });
   if (!context) throw new Error('WebGL2 unavailable');
@@ -34,6 +36,12 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   const textures = new Set<THREE.Texture>();
   const labelCache = new Map<string, THREE.MeshBasicMaterial>();
   const units = new THREE.Group();
+  const overlays = new THREE.Group();
+  const pickables: THREE.Object3D[] = [];
+  const raycaster = new THREE.Raycaster();
+  const gesture = new TapGesture();
+  let animateFrame: ((now: number) => boolean) | undefined;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = initial;
   let disposed = false;
   let frame = 0;
@@ -63,10 +71,14 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   }
   function requestDraw() {
     if (disposed || frame) return;
-    frame = requestAnimationFrame(() => {
+    frame = requestAnimationFrame(now => {
       frame = 0;
       if (disposed) return;
-      try { renderer.render(scene, camera); } catch { onFailure(); }
+      try {
+        const active = animateFrame?.(now) ?? false;
+        renderer.render(scene, camera);
+        if (active) requestDraw(); else animateFrame = undefined;
+      } catch { onFailure(); }
     });
   }
   function reset() {
@@ -81,10 +93,25 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); reset();
   }
   function lost(event: Event) { event.preventDefault(); onFailure(); }
+  function down(event: PointerEvent) { if (event.button === 0) gesture.down(event.pointerId, event.clientX, event.clientY); }
+  function movePointer(event: PointerEvent) { gesture.move(event.pointerId, event.clientX, event.clientY); }
+  function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); }
+  function up(event: PointerEvent) {
+    if (!gesture.up(event.pointerId, event.clientX, event.clientY) || !state.interaction.interactionEnabled || animateFrame) return;
+    const bounds = canvas.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
+    raycaster.setFromCamera(new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1), camera);
+    const hit = raycaster.intersectObjects([...units.children, ...overlays.children, ...pickables], true).find(value => value.object.userData.site || value.object.userData.lane);
+    if (!hit) return;
+    if (hit.object.userData.lane) handlers.onLaneSelect(hit.object.userData.lane as 'C' | 'D');
+    else handlers.onSiteSelect(hit.object.userData.site as Site);
+  }
   function dispose() {
     if (disposed) return; disposed = true;
     cancelAnimationFrame(frame); observer?.disconnect();
     canvas.removeEventListener('webglcontextlost', lost);
+    canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', movePointer);
+    canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancelPointer);
     controls.removeEventListener('change', requestDraw); controls.dispose();
     geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose());
     scene.clear(); labelCache.clear(); renderer.dispose(); renderer.forceContextLoss(); canvas.remove();
@@ -103,7 +130,8 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     mesh(geometry(new THREE.BoxGeometry(7.2, 0.04, 0.28)), river, 0, 0.025, 0);
     for (const site of SITES) {
       const { x, z } = sitePoint(site);
-      mesh(site.startsWith('HQ') ? wideTile : tile, (Math.round(x + z) % 2 === 0) ? grass : alternate, x, 0.04, z);
+      const ground = mesh(site.startsWith('HQ') ? wideTile : tile, (Math.round(x + z) % 2 === 0) ? grass : alternate, x, 0.04, z);
+      ground.userData = { site }; pickables.push(ground);
     }
     const bridge = geometry(new THREE.BoxGeometry(0.65, 0.09, 0.56));
     const rail = geometry(new THREE.BoxGeometry(0.045, 0.1, 0.56));
@@ -140,16 +168,54 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     const arrowMaterial = material('#e9c977');
     const arrowShaft = geometry(new THREE.CylinderGeometry(0.026, 0.026, 1, 6));
     const arrowHead = geometry(new THREE.ConeGeometry(0.12, 0.28, 6));
-    scene.add(units);
+    const gold = material('#efd16a'), selectedMaterial = material('#65d6df'), pendingMaterial = material('#ffa656');
+    const ring = geometry(new THREE.TorusGeometry(0.44, 0.035, 4, 24));
+    const wideRing = geometry(new THREE.TorusGeometry(0.7, 0.035, 4, 24));
+    const pathShape = geometry(new THREE.BoxGeometry(0.12, 0.04, 6));
+    scene.add(units, overlays);
     function update(next: BattlefieldViewState) {
       if (disposed) return;
-      state = next; units.clear();
+      const previous = state;
+      const transition = next.moveCount === previous.moveCount + 1 && next.lastMove ? next.lastMove : null;
+      const movingPiece = transition ? previous.pieces.find(piece => piece.position === transition.from) : undefined;
+      animateFrame = undefined;
+      state = next; units.clear(); overlays.clear();
+      const moving = new THREE.Group();
       for (const piece of state.pieces) {
         const { x, z } = sitePoint(piece.position), own = piece.owner === state.viewer;
-        mesh(badge, own ? blue : red, x, 0.16, z, units);
+        const group = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
+        const base = mesh(badge, own ? blue : red, x, 0.16, z, group); base.userData = { site: piece.position };
         const text = piece.unknown ? '?' : `${PIECE_ICONS[piece.type]}\n${PIECES[piece.type].label}`;
-        const plaque = mesh(face, label(text, own ? '#223f52' : '#f1e5d4', own ? '#eee1bb' : '#86534b'), x, 0.31, z, units);
+        const plaque = mesh(face, label(text, own ? '#223f52' : '#f1e5d4', own ? '#eee1bb' : '#86534b'), x, 0.31, z, group);
+        plaque.userData = { site: piece.position };
         plaque.rotation.set(-Math.PI / 2 + (state.viewer === 1 ? 0.2 : -0.2), 0, state.viewer === 1 ? 0 : Math.PI);
+      }
+      units.add(moving);
+      if (transition && movingPiece && !reducedMotion.matches) {
+        const from = sitePoint(transition.from), to = sitePoint(transition.to);
+        const ghost = !moving.children.length;
+        if (ghost) {
+          // An eliminated attacker uses only the previously visible representation.
+          mesh(badge, movingPiece.owner === state.viewer ? blue : red, to.x, 0.16, to.z, moving);
+        }
+        const start = performance.now();
+        animateFrame = now => {
+          const progress = Math.min(1, (now - start) / 300);
+          moving.position.set((from.x - to.x) * (1 - progress), Math.sin(progress * Math.PI) * (!movingPiece.unknown && movingPiece.type === 'aircraft' ? 0.7 : 0.12), (from.z - to.z) * (1 - progress));
+          if (progress === 1 && ghost) moving.clear();
+          return progress < 1;
+        };
+        animateFrame(start);
+      }
+      const interaction = state.interaction;
+      for (const site of new Set([...interaction.legalTargets, ...(interaction.selectedSite ? [interaction.selectedSite] : []), ...(interaction.pendingSite ? [interaction.pendingSite] : [])])) {
+        const { x, z } = sitePoint(site);
+        const mark = mesh(site.startsWith('HQ') ? wideRing : ring, site === interaction.pendingSite ? pendingMaterial : site === interaction.selectedSite ? selectedMaterial : gold, x, 0.13, z, overlays);
+        mark.rotation.x = -Math.PI / 2; mark.userData = { site };
+      }
+      for (const lane of interaction.laneCandidates) {
+        const path = mesh(pathShape, lane === interaction.selectedLane ? pendingMaterial : gold, lane === 'C' ? -0.5 : 0.5, 0.72, 0, overlays);
+        path.userData = { lane };
       }
       if (state.lastMove) {
         const from = sitePoint(state.lastMove.from), to = sitePoint(state.lastMove.to);
@@ -160,8 +226,10 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       }
       requestDraw();
     }
-    canvas.setAttribute('aria-label', '閲覧専用の三次元戦場'); canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', '操作可能な三次元戦場'); canvas.setAttribute('role', 'img');
     host.append(canvas); canvas.addEventListener('webglcontextlost', lost);
+    canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', movePointer);
+    canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancelPointer);
     controls.addEventListener('change', requestDraw);
     observer = new ResizeObserver(resize); observer.observe(host);
     update(initial); resize();

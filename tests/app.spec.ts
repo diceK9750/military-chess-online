@@ -10,7 +10,7 @@ test('wide play screen centers the board and keeps the shared rule panels beside
   await page.getByText('検証用の盤面を開く', { exact: true }).click();
   await page.getByRole('button', { name: '飛行機の高飛び' }).click();
   const geometry = await page.evaluate(() => {
-    const board = document.querySelector('.board')!.getBoundingClientRect();
+    const board = document.querySelector('.game-surfaces')!.getBoundingClientRect();
     const panels = [...document.querySelectorAll<HTMLElement>('.rule-reference')].filter(panel => getComputedStyle(panel).display !== 'none');
     return { centerDelta: Math.abs(board.x + board.width / 2 - innerWidth / 2), pageHeight: document.documentElement.scrollHeight, viewportHeight: innerHeight, panelCount: panels.length, panelsFit: panels.every(panel => panel.scrollHeight <= panel.clientHeight + 2) };
   });
@@ -67,7 +67,7 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
         const control = state === 'setup' ? document.querySelector('.setup-screen .wide') : document.querySelector('.move-prompt') ?? document.querySelector('.confirm .primary');
         const wideMode = width >= 1200 && height >= 800;
         return {
-          board: box(board), baseline, boardCenterDelta: Math.round(boardRect.x + boardRect.width / 2 - innerWidth / 2),
+          board: box(board), baseline, boardCenterDelta: Math.round((state === 'play' ? document.querySelector('.game-surfaces')!.getBoundingClientRect().x + document.querySelector('.game-surfaces')!.getBoundingClientRect().width / 2 : boardRect.x + boardRect.width / 2) - innerWidth / 2),
           references: referenceBoxes, referenceCount: visibleReferences.length, overlapsBoard,
           horizontalScroll: document.documentElement.scrollWidth > innerWidth,
           documentFits: document.documentElement.scrollHeight <= innerHeight + 2,

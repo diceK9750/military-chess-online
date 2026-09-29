@@ -33,6 +33,14 @@ test('viewer 2 has the same information boundary', () => {
   expect(view.pieces.filter(piece => piece.owner === 1).every(piece => piece.unknown)).toBe(true);
   expect(view.pieces.filter(piece => piece.owner === 2).every(piece => !piece.unknown)).toBe(true);
 });
+test('interaction is allowlisted, detached, and disabled at game end', () => {
+  const interaction = { selectedSite: 'D5' as const, legalTargets: ['D6' as const], pendingSite: null, laneCandidates: ['C' as const, 'D' as const], selectedLane: undefined, interactionEnabled: true, secret: 'not allowed' };
+  const view = toBattlefieldView(scenario('highFlight'), 1, interaction);
+  expect(view.interaction).not.toHaveProperty('secret');
+  expect(view.interaction.legalTargets).not.toBe(interaction.legalTargets);
+  expect(view.interaction.laneCandidates).not.toBe(interaction.laneCandidates);
+  expect(toBattlefieldView({ ...scenario('highFlight'), result: { winner: 1, reason: 'HQ_CAPTURE' } }, 1, interaction).interaction.interactionEnabled).toBe(false);
+});
 test('current sites exclude removed pieces and use exactly one HQ occupant', () => {
   const game = scenario('highFlight');
   const view = toBattlefieldView({ ...game, pieces: game.pieces.map(piece => piece.position === 'D7' ? { ...piece, position: null } : piece) }, 1);
