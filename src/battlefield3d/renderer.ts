@@ -45,6 +45,8 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   let state = initial;
   let disposed = false;
   let frame = 0;
+  let resizeFrame = 0;
+  let lastSize = '';
   let observer: ResizeObserver | undefined;
   function geometry<T extends THREE.BufferGeometry>(value: T): T { geometries.add(value); return value; }
   function material(color: string) {
@@ -89,7 +91,11 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   function resize() {
     if (disposed) return;
     const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, width < 600 ? 1.25 : 1.5));
+    const ratio = Math.min(window.devicePixelRatio || 1, width < 600 ? 1.25 : 1.5);
+    const size = `${width}/${height}/${ratio}`;
+    if (size === lastSize) return;
+    lastSize = size;
+    renderer.setPixelRatio(ratio);
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); reset();
   }
   function lost(event: Event) { event.preventDefault(); onFailure(); }
@@ -108,7 +114,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   }
   function dispose() {
     if (disposed) return; disposed = true;
-    cancelAnimationFrame(frame); observer?.disconnect();
+    cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); observer?.disconnect();
     canvas.removeEventListener('webglcontextlost', lost);
     canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', movePointer);
     canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancelPointer);
@@ -231,7 +237,10 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', movePointer);
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancelPointer);
     controls.addEventListener('change', requestDraw);
-    observer = new ResizeObserver(resize); observer.observe(host);
+    // Do not mutate canvas dimensions inside a ResizeObserver delivery cycle.
+    observer = new ResizeObserver(() => {
+      if (!disposed && !resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
+    }); observer.observe(host);
     update(initial); resize();
     return { update, reset, dispose };
   } catch (error) { dispose(); throw error; }

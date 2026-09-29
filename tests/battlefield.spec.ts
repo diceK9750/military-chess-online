@@ -6,6 +6,20 @@ import type { Site } from '../src/game/types';
 test.use({ launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } });
 const canvasName = '操作可能な三次元戦場';
 const entry = process.env.BATTLEFIELD_TEST_URL ?? '/';
+test('responsive resizing does not cause ResizeObserver errors', async ({ page }) => {
+  await page.addInitScript(() => {
+    const errors: string[] = [];
+    Object.assign(window, { battlefieldResizeErrors: errors });
+    window.addEventListener('error', event => { errors.push(event.message); });
+  });
+  await start(page);
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [390,844], [430,932], [1440,900], [844,390]]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  }
+  expect(await page.evaluate(() => (window as unknown as { battlefieldResizeErrors: string[] }).battlefieldResizeErrors)).toEqual([]);
+});
 async function start(page: Page) {
   await page.goto(entry);
   await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
