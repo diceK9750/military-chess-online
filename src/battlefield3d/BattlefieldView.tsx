@@ -11,19 +11,30 @@ export function BattlefieldView({ state, onSiteSelect, onLaneSelect, onAnimation
   current.current = { state, onSiteSelect, onLaneSelect, onAnimationChange, onUnavailable };
   useEffect(() => {
     let cancelled = false;
+    let restarting = false;
     const fail = () => {
+      const retryGL = renderer.current?.backend === 'webgpu' && !restarting;
       renderer.current?.dispose(); renderer.current = null;
-      if (!cancelled) { setStatus('error'); current.current.onAnimationChange?.(false); current.current.onUnavailable?.(); }
+      if (!cancelled) current.current.onAnimationChange?.(false);
+      if (!cancelled && retryGL) { restarting = true; setStatus('loading'); void load(true); return; }
+      if (!cancelled) { setStatus('error'); current.current.onUnavailable?.(); }
     };
-    void import('./renderer').then(({ createBattlefield }) => {
+    async function load(forceWebGL = false) {
+      try {
+      const { createBattlefield } = await import('./renderer');
       if (cancelled) return;
-      renderer.current = createBattlefield(host.current!, current.current.state, fail, {
+      const created = await createBattlefield(host.current!, current.current.state, fail, {
         onSiteSelect: site => current.current.onSiteSelect(site),
         onLaneSelect: lane => current.current.onLaneSelect(lane),
         onAnimationChange: active => current.current.onAnimationChange?.(active),
-      });
+      }, forceWebGL);
+      if (cancelled) { created.dispose(); return; }
+      renderer.current = created;
+      created.update(current.current.state);
       setStatus('ready');
-    }).catch(fail);
+      } catch { fail(); }
+    }
+    void load();
     return () => { cancelled = true; renderer.current?.dispose(); renderer.current = null; };
   }, []);
   useEffect(() => {

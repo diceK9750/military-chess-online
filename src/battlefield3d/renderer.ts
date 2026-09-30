@@ -6,8 +6,12 @@ import { BRIDGES, sitePoint } from './state';
 import type { BattlefieldHandlers, BattlefieldViewState, CameraPreset } from './state';
 import type { Site } from '../game/types';
 import { TapGesture } from './gesture';
+import { createBackend } from './backend';
+import { identity } from './identity';
+import { allowBattleCamera, motionProfile } from './presentation';
 
 export interface BattlefieldRenderer {
+  readonly backend: 'webgpu' | 'webgl2';
   update(state: BattlefieldViewState): void;
   reset(): void;
   setCamera(preset: CameraPreset): void;
@@ -15,11 +19,10 @@ export interface BattlefieldRenderer {
 }
 
 /** Render-only adapter: no GameState, IDs, legal moves, CPU, or persistence. */
-export function createBattlefield(host: HTMLElement, initial: BattlefieldViewState, onFailure: () => void, handlers: BattlefieldHandlers): BattlefieldRenderer {
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('webgl2', { antialias: true, alpha: false });
-  if (!context) throw new Error('WebGL2 unavailable');
-  const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true });
+export async function createBattlefield(host: HTMLElement, initial: BattlefieldViewState, onFailure: () => void, handlers: BattlefieldHandlers, forceWebGL = false): Promise<BattlefieldRenderer> {
+  const backend = await createBackend(onFailure, forceWebGL);
+  const { canvas, engine: renderer } = backend;
+  canvas.dataset.backend = backend.kind;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#24383d');
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
@@ -35,6 +38,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
   const billboards: THREE.Object3D[] = [];
+  const labelPosition=new THREE.Vector3();
   let busy = false;
   function animationStatus(active: boolean) { if (busy !== active) { busy = active; handlers.onAnimationChange?.(active); } }
   const labelCache = new Map<string, THREE.MeshBasicMaterial>();
@@ -44,6 +48,10 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   const raycaster = new THREE.Raycaster();
   const gesture = new TapGesture();
   let animateFrame: ((now: number) => boolean) | undefined;
+  let effectsFrame: ((now:number)=>boolean)|undefined;
+  let restoreFocus: (() => void) | undefined;
+  let lastManual=-Infinity;
+  let dragStart:{id:number;x:number;y:number}|null=null;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = initial;
   let disposed = false;
@@ -81,14 +89,19 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       frame = 0;
       if (disposed) return;
       try {
-        const active = animateFrame?.(now) ?? false;
-        billboards.forEach(label => label.quaternion.copy(camera.quaternion));
+        const moving = animateFrame?.(now) ?? false;
+        const effects = effectsFrame?.(now) ?? false;
+        const active = moving || effects;
+        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.12,Math.max(.85,labelPosition.distanceTo(camera.position)/15)));});
         renderer.render(scene, camera);
-        if (active) requestDraw(); else { animateFrame = undefined; animationStatus(false); }
+        if (!moving) { animateFrame=undefined; animationStatus(false); }
+        if (!effects) effectsFrame=undefined;
+        if (active) requestDraw();
       } catch { onFailure(); }
     });
   }
-  function setCamera(preset: CameraPreset) {
+  function setCamera(preset: CameraPreset, manual=false) {
+    if(manual)lastManual=performance.now();
     cameraPreset = preset;
     const distance = Math.min(30, Math.max(13, 11 / camera.aspect));
     const side = state.viewer === 1 ? 1 : -1;
@@ -106,7 +119,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     }
     controls.update(); requestDraw();
   }
-  function reset() { setCamera('full'); }
+  function reset() { setCamera('full',true); }
   function resize() {
     if (disposed) return;
     const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
@@ -118,10 +131,12 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); setCamera(cameraPreset);
   }
   function lost(event: Event) { event.preventDefault(); onFailure(); }
-  function down(event: PointerEvent) { if (event.button === 0) gesture.down(event.pointerId, event.clientX, event.clientY); }
-  function movePointer(event: PointerEvent) { gesture.move(event.pointerId, event.clientX, event.clientY); }
+  function down(event: PointerEvent) { if (event.button === 0) {if(dragStart)lastManual=performance.now();else dragStart={id:event.pointerId,x:event.clientX,y:event.clientY};gesture.down(event.pointerId, event.clientX, event.clientY);} }
+  function movePointer(event: PointerEvent) { if(dragStart&&Math.hypot(event.clientX-dragStart.x,event.clientY-dragStart.y)>6)lastManual=performance.now();gesture.move(event.pointerId, event.clientX, event.clientY); }
+  function wheel(){lastManual=performance.now();}
   function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); }
   function up(event: PointerEvent) {
+    dragStart=null;
     if (!gesture.up(event.pointerId, event.clientX, event.clientY) || !state.interaction.interactionEnabled || animateFrame) return;
     const bounds = canvas.getBoundingClientRect();
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
@@ -137,20 +152,26 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     canvas.removeEventListener('webglcontextlost', lost);
     canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', movePointer);
     canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancelPointer);
+    canvas.removeEventListener('wheel',wheel);
     controls.removeEventListener('change', requestDraw); controls.dispose();
     geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose());
-    scene.clear(); labelCache.clear(); renderer.dispose(); renderer.forceContextLoss(); canvas.remove();
+    scene.clear(); labelCache.clear(); backend.dispose(); canvas.remove();
   }
   try {
     scene.add(new THREE.HemisphereLight('#fff8df', '#45574e', 2.4));
     const sun = new THREE.DirectionalLight('#fff0c9', 2.2); sun.position.set(-5, 10, 7); scene.add(sun);
-    const soil = material('#786247'), grass = material('#728362'), alternate = material('#788968');
+    const soil = material('#594535'), grass = material('#b5b08a'), alternate = material('#aaa77e');
     const wood = material('#aa8a59'), river = material('#658d92');
     const blue = material('#375f78'), red = material('#86534b');
     const tile = geometry(new THREE.BoxGeometry(0.96, 0.06, 0.96));
     const wideTile = geometry(new THREE.BoxGeometry(1.96, 0.06, 0.96));
     mesh(geometry(new THREE.BoxGeometry(7.3, 0.5, 9.3)), soil, 0, -0.34, 0);
     mesh(geometry(new THREE.BoxGeometry(7.2, 0.1, 9.2)), grass, 0, -0.05, 0);
+    const lacquer = material('#423329'), ink = material('#5a5845');
+    for (const x of [-3.6, 3.6]) mesh(geometry(new THREE.BoxGeometry(.2, .18, 9.4)), lacquer, x, -.04, 0);
+    for (const z of [-4.6, 4.6]) mesh(geometry(new THREE.BoxGeometry(7.4, .18, .2)), lacquer, 0, -.04, z);
+    for (let row = 0; row <= 8; row++) mesh(geometry(new THREE.BoxGeometry(6.05, .008, .012)), ink, 0, .078, row - 4);
+    for (let col = 0; col <= 6; col++) mesh(geometry(new THREE.BoxGeometry(.012, .008, 8.05)), ink, col - 3, .078, 0);
     // A shallow boundary channel with exactly two crossing bridges.
     mesh(geometry(new THREE.BoxGeometry(7.2, 0.04, 0.28)), river, 0, 0.025, 0);
     for (const site of SITES) {
@@ -173,7 +194,14 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     const insignia = geometry(new THREE.BoxGeometry(.09, .055, .045));
     const equipment = geometry(new THREE.BoxGeometry(.34, .08, .12));
     const skin = material('#d9c8a7'), dark = material('#273a40'), brass = material('#d8b85e');
-    const badge = geometry(new THREE.CylinderGeometry(0.39, 0.45, 0.17, 5));
+    const shape = new THREE.Shape(); shape.moveTo(-.36, -.36); shape.lineTo(.36, -.36); shape.lineTo(.39, .16); shape.lineTo(0, .49); shape.lineTo(-.39, .16); shape.closePath();
+    const badge = geometry(new THREE.ExtrudeGeometry(shape, { depth: .14, bevelEnabled: false })); badge.rotateX(-Math.PI / 2);
+    const baseWood = material('#b08b58');
+    const baseName = geometry(new THREE.PlaneGeometry(.54, .18));
+    const armor = geometry(new THREE.BoxGeometry(.4, .33, .24));
+    const tool = geometry(new THREE.BoxGeometry(.05, .38, .05));
+    const horse = geometry(new THREE.BoxGeometry(.32, .22, .48));
+    const cloak = geometry(new THREE.ConeGeometry(.23, .35, 5));
     const pole = geometry(new THREE.CylinderGeometry(0.025, 0.025, 0.85, 5));
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
     for (const owner of [1, 2] as const) {
@@ -204,6 +232,12 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     const ring = geometry(new THREE.TorusGeometry(0.44, 0.035, 4, 24));
     const wideRing = geometry(new THREE.TorusGeometry(0.7, 0.035, 4, 24));
     const pathShape = geometry(new THREE.BoxGeometry(0.12, 0.04, 6));
+    const scan = new THREE.MeshBasicMaterial({color:'#bce8ef',transparent:true,opacity:.6}); materials.add(scan);
+    const fxGroup=new THREE.Group();scene.add(fxGroup);
+    const inkFx=new THREE.MeshBasicMaterial({color:'#252521',transparent:true,opacity:.8});materials.add(inkFx);
+    const lightFx=new THREE.MeshBasicMaterial({color:'#e9bf64',transparent:true,opacity:.85});materials.add(lightFx);
+    const splatter=geometry(new THREE.BoxGeometry(.22,.04,.1));
+    const particle=geometry(new THREE.IcosahedronGeometry(.035,0));
     scene.add(units, overlays);
     function update(next: BattlefieldViewState) {
       if (disposed) return;
@@ -216,7 +250,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       for (const piece of state.pieces) {
         const { x, z } = sitePoint(piece.position), own = piece.owner === state.viewer;
         const group = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
-        const base = mesh(badge, own ? blue : red, x, 0.16, z, group); base.userData = { site: piece.position };
+        const base = mesh(badge, baseWood, x, .075, z, group); base.rotation.y = piece.owner === 1 ? 0 : Math.PI; base.userData = { site: piece.position };
         const uniform = own ? blue : red;
         const part = (shape: THREE.BufferGeometry, surface: THREE.Material, dx: number, y: number, dz = 0) => {
           const object = mesh(shape, surface, x + dx, y, z + dz, group);
@@ -230,25 +264,38 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
           const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
         }
         // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
+        const style = identity(piece);
         if (!piece.unknown) {
-          if (['general','lieutenantGeneral','majorGeneral','colonel','lieutenantColonel','major'].includes(piece.type)) {
-            part(insignia, brass, 0, .8);
+          if (style.rank) {
+            for (let i = 0; i < Math.ceil(style.rank / 3); i++) {
+              const badge = part(insignia, brass, (i - 1) * .1, .5, .15);
+              badge.scale.x = .8 + ((style.rank - 1) % 3) * .15;
+            }
+            if (style.rank >= 7) part(equipment, brass, .2, .4, -.1).rotation.z = -.4;
           } else if (piece.type === 'aircraft') {
             part(equipment, brass, 0, .47, -.16).scale.x = 1.6;
-          } else if (piece.type === 'engineer' || piece.type === 'tank') {
-            part(equipment, dark, 0, .46, -.18).rotation.x = Math.PI / 2;
+          } else if (piece.type === 'tank') {
+            part(armor, dark, 0, .43); part(equipment, brass, 0, .46, .18);
+          } else if (piece.type === 'engineer') {
+            part(equipment, wood, .23, .26); part(tool, dark, -.23, .45);
+          } else if (piece.type === 'cavalry') {
+            part(horse, wood, 0, .27, -.18); part(headShape, wood, 0, .48, -.38);
+          } else if (piece.type === 'spy') {
+            part(cloak, dark, 0, .43);
           } else if (piece.type === 'flag') {
             part(pole, wood, .24, .52); part(equipment, uniform, .36, .86);
           } else if (piece.type === 'mine') {
-            part(insignia, brass, 0, .54, .12);
+            part(equipment, dark, 0, .23, .24); part(insignia, brass, 0, .29, .24);
           }
         }
         const text = piece.unknown ? '?' : PIECES[piece.type].label;
+        const engraving = mesh(baseName, label(text, '#2b251d', '#c8a779', true), x, .223, z + .22, group); engraving.rotation.x = -Math.PI / 2; engraving.userData = { site: piece.position };
         const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#f2e8ca' : '#743e36', true), x, 1.01, z, group);
         plaque.userData = { site: piece.position }; billboards.push(plaque);
       }
       units.add(moving);
       if (transition && movingPiece && !reducedMotion.matches) {
+        const profile=motionProfile(movingPiece);
         const from = sitePoint(transition.from), to = sitePoint(transition.to);
         const ghost = !moving.children.length;
         if (ghost) {
@@ -257,16 +304,59 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
         }
         const start = performance.now();
         animateFrame = now => {
-          const progress = Math.min(1, (now - start) / 300);
-          moving.position.set((from.x - to.x) * (1 - progress), Math.sin(progress * Math.PI) * (!movingPiece.unknown && movingPiece.type === 'aircraft' ? 0.7 : 0.12), (from.z - to.z) * (1 - progress));
+          const progress = Math.min(1, (now - start) / profile.duration);
+          const travel=profile.easing==='rush'?1-Math.pow(1-progress,2):profile.easing==='heavy'?progress*progress*(3-2*progress):progress;
+          moving.position.set((from.x - to.x) * (1 - travel), Math.sin(progress * Math.PI) * profile.height, (from.z - to.z) * (1 - travel));
           if (progress === 1 && ghost) moving.clear();
           return progress < 1;
         };
         animateFrame(start);
       }
+      if(transition&&state.battleSite&&state.battleOutcome&&!reducedMotion.matches){
+        restoreFocus?.();
+        fxGroup.clear();const at=sitePoint(state.battleSite),started=performance.now(),outcome=state.battleOutcome;
+        canvas.dataset.battleEffect=outcome;
+        const flash=mesh(ring,lightFx,at.x,.24,at.z,fxGroup);flash.rotation.x=-Math.PI/2;
+        const count=host.clientWidth<600?6:12;
+        const drops=Array.from({length:count},(_,i)=>mesh(i%2?splatter:particle,i%2?inkFx:scan,at.x,.3,at.z,fxGroup));
+        const slashes = Array.from({ length: outcome === 'MUTUAL' ? 2 : 1 }, (_, i) => {
+          const slash = mesh(splatter, inkFx, at.x, 1.1, at.z, fxGroup);
+          slash.rotation.y = i === 0 ? Math.PI / 4 : -Math.PI / 4;
+          return slash;
+        });
+        const cameraPosition=camera.position.clone(),cameraTarget=controls.target.clone();
+        const focus=allowBattleCamera(false,started-lastManual);
+        restoreFocus = () => {
+          if (focus && lastManual <= started) {
+            camera.position.copy(cameraPosition); controls.target.copy(cameraTarget); controls.update();
+          }
+          restoreFocus = undefined;
+        };
+        canvas.dataset.cameraDirector=focus?'focus':'manual';
+        effectsFrame=now=>{
+          const t=Math.min(1,(now-started)/800);
+          drops.forEach((drop,i)=>{const angle=i/count*Math.PI*2;drop.position.set(at.x+Math.cos(angle)*t*.85,.5+Math.sin(t*Math.PI)*.7,at.z+Math.sin(angle)*t*.85);drop.rotation.y=angle;drop.scale.setScalar(1-t);});
+          slashes.forEach(slash => { slash.scale.set(4 * (1 - t), 1, 1); slash.position.y = 1.1 + Math.sin(t * Math.PI) * .2; });
+          flash.scale.setScalar(.8+t*.9);lightFx.opacity=(1-t)*.8;inkFx.opacity=(1-t)*.8;
+          if(outcome==='MUTUAL'){flash.scale.x*=1.4;flash.rotation.z=t*Math.PI;}
+          if(focus&&lastManual<=started){const zoom=Math.sin(t*Math.PI)*.45;camera.position.copy(cameraPosition).lerp(new THREE.Vector3(at.x,5,at.z+(state.viewer===1?4:-4)),zoom);controls.target.copy(cameraTarget).lerp(new THREE.Vector3(at.x,.3,at.z),zoom);controls.update();}
+          if(t===1){restoreFocus?.();fxGroup.clear();delete canvas.dataset.battleEffect;return false;}return true;
+        };
+      } else if(next.moveCount!==previous.moveCount&&!transition){restoreFocus?.();fxGroup.clear();effectsFrame=undefined;delete canvas.dataset.battleEffect;}
       animationStatus(!!animateFrame);
       if (cameraPreset === 'selected' || next.viewer !== previous.viewer) setCamera(cameraPreset);
       const interaction = state.interaction;
+      canvas.dataset.analysisCount=String(state.analysis?.hypotheses.length??0);
+      if(state.analysis) {
+        for(const hypothesis of state.analysis.hypotheses) {
+          const p=sitePoint(hypothesis.position), mark=mesh(ring,scan,p.x,.25,p.z,overlays);
+          mark.rotation.x=-Math.PI/2; mark.scale.setScalar(hypothesis.count<=3?1.13:.9); mark.userData={site:hypothesis.position};
+        }
+        for(const route of state.analysis.routes) {
+          const a=sitePoint(route.from),b=sitePoint(route.to),direction=new THREE.Vector3(b.x-a.x,0,b.z-a.z);
+          const line=mesh(arrowShaft,scan,(a.x+b.x)/2,.3,(a.z+b.z)/2,overlays); line.scale.y=direction.length();line.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());
+        }
+      }
       for (const site of new Set([...interaction.legalTargets, ...(interaction.selectedSite ? [interaction.selectedSite] : []), ...(interaction.pendingSite ? [interaction.pendingSite] : [])])) {
         const { x, z } = sitePoint(site);
         const mark = mesh(site.startsWith('HQ') ? wideRing : ring, site === interaction.pendingSite ? pendingMaterial : site === interaction.selectedSite ? selectedMaterial : gold, x, 0.13, z, overlays);
@@ -296,12 +386,13 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     host.append(canvas); canvas.addEventListener('webglcontextlost', lost);
     canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', movePointer);
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancelPointer);
+    canvas.addEventListener('wheel',wheel,{passive:true});
     controls.addEventListener('change', requestDraw);
     // Do not mutate canvas dimensions inside a ResizeObserver delivery cycle.
     observer = new ResizeObserver(() => {
       if (!disposed && !resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
     }); observer.observe(host);
     update(initial); resize();
-    return { update, reset, setCamera, dispose };
+    return { backend: backend.kind, update, reset, setCamera:preset=>setCamera(preset,true), dispose };
   } catch (error) { dispose(); throw error; }
 }

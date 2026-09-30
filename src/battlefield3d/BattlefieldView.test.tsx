@@ -61,6 +61,22 @@ test('departing before lazy loading resolves never creates a renderer', async ()
   await act(async () => {});
   expect(mock.create).not.toHaveBeenCalled();
 });
+
+test('device loss clears animation busy and retries GL once before emergency fallback', async () => {
+  const animation = vi.fn(), unavailable = vi.fn();
+  mock.create.mockImplementationOnce(() => ({ backend: 'webgpu', reset: mock.reset, dispose: mock.dispose, update: mock.update }));
+  render(<BattlefieldView state={state()} {...handlers} onAnimationChange={animation} onUnavailable={unavailable} />);
+  await waitFor(() => expect(screen.getByRole('button', { name: '視点を戻す' })).toBeEnabled());
+  act(() => input().onAnimationChange?.(true));
+  act(() => mock.create.mock.calls[0][2]());
+  expect(animation).toHaveBeenLastCalledWith(false);
+  await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(2));
+  expect(mock.create.mock.calls[1][4]).toBe(true);
+  expect(unavailable).not.toHaveBeenCalled();
+  act(() => mock.create.mock.calls[1][2]());
+  expect(unavailable).toHaveBeenCalledOnce();
+  expect(mock.create).toHaveBeenCalledTimes(2);
+});
 test('3D selection and pending synchronize with assist UI, and retap commits only once', async () => {
   const changed = vi.fn();
   render(<LocalGame initial={scenario('highFlight')} onChange={changed} />);

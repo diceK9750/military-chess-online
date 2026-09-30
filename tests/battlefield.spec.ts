@@ -84,6 +84,7 @@ async function synchronized(page: Page) {
   await expect(page.locator('.board')).toHaveCount(0);
 }
 async function choose3d(page: Page, touch = false): Promise<Site> {
+  await expect(page.getByRole('img',{name:canvasName})).not.toHaveAttribute('data-battle-effect',/./);
   const pieces = await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents();
   for (const line of pieces.filter(text => text.includes('自軍'))) {
     await tap(page, line.split(' ')[0] as Site, touch);
@@ -174,6 +175,18 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await expect(canvas).toBeVisible();
     await synchronized(page);
     expect(Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before + 4);
+    const savedBeforeAdvice=await page.evaluate(()=>localStorage.getItem('military-chess:cpu-match:v1'));
+    await page.getByRole('button',{name:'AI参謀 ONにする'}).click();
+    await expect(page.getByRole('article',{name:'戦術候補1'})).toBeVisible();
+    await expect(page.getByRole('article',{name:'CPU判断の公開理由'})).toContainText('公開要素小計');
+    await expect(canvas).toHaveAttribute('data-analysis-count',/^[1-9]/);
+    await page.getByText('未知敵駒の候補を調べる',{exact:true}).click();
+    await page.locator('.enemy-analysis button').first().click();
+    await expect(page.locator('.hypothesis')).toContainText('候補');
+    expect(await page.evaluate(()=>localStorage.getItem('military-chess:cpu-match:v1'))).toBe(savedBeforeAdvice);
+    await page.screenshot({path:info.outputPath('intelligence-'+width+'.png'),fullPage:true});
+    await page.getByRole('button',{name:'AI参謀 OFFにする'}).click();
+    await expect(canvas).toHaveAttribute('data-analysis-count','0');
     expect(errors).toEqual([]);
     await noBoardEver(page);
   });

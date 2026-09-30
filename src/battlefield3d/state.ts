@@ -1,10 +1,12 @@
 import { SITES, anchors } from '../game/board';
-import type { GameState, Piece, PieceType, Player, Site } from '../game/types';
+import type { GameState, Move, Outcome, Piece, PieceType, Player, Site } from '../game/types';
 
 export type BattlefieldPiece = { readonly owner: Player; readonly position: Site } & (
   { readonly unknown: true } | { readonly unknown: false; readonly type: PieceType }
 );
 export interface BattlefieldViewState {
+  readonly battleOutcome?: Outcome;
+  readonly analysis?: BattlefieldAnalysis;
   readonly phase?: 'setup';
   readonly viewer: Player;
   readonly moveCount: number;
@@ -14,6 +16,7 @@ export interface BattlefieldViewState {
   readonly lastMove: { readonly from: Site; readonly to: Site } | null;
   readonly interaction: BattlefieldInteraction;
 }
+export interface BattlefieldAnalysis { readonly routes: readonly Move[]; readonly hypotheses: readonly {position:Site;count:number}[]; readonly focusSite: Site|null }
 export interface BattlefieldInteraction {
   readonly selectedSite: Site | null;
   readonly legalTargets: readonly Site[];
@@ -44,7 +47,7 @@ export function toSetupBattlefieldView(pieces: readonly Piece[], selected: Site 
 }
 
 /** Copy allowlisted fields; never retain original objects or internal IDs. */
-export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle): BattlefieldViewState {
+export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle, analysis?: BattlefieldAnalysis): BattlefieldViewState {
   const last = [...game.events].reverse().find(event => event.kind === 'MOVE');
   const pieces: BattlefieldPiece[] = [];
   // Site order removes correlations with internal IDs and placement order.
@@ -55,7 +58,7 @@ export function toBattlefieldView(game: GameState, viewer: Player, interaction: 
       ? { owner: piece.owner, position, unknown: false, type: piece.type }
       : { owner: piece.owner, position, unknown: true });
   }
-  return { viewer, moveCount: game.moveCount, finished: game.result !== null, battleSite: last?.battle ? last.move.to : null, pieces,
+  return { ...(last?.battle?{battleOutcome:last.battle}:{}), ...(analysis?{analysis:{routes:analysis.routes.map(m=>({from:m.from,to:m.to,...(m.lane?{lane:m.lane}:{})})),hypotheses:analysis.hypotheses.map(h=>({position:h.position,count:h.count})),focusSite:analysis.focusSite}}:{}), viewer, moveCount: game.moveCount, finished: game.result !== null, battleSite: last?.battle ? last.move.to : null, pieces,
     lastMove: last ? { from: last.move.from, to: last.move.to } : null,
     interaction: { selectedSite: interaction.selectedSite, legalTargets: [...interaction.legalTargets], pendingSite: interaction.pendingSite,
       laneCandidates: [...interaction.laneCandidates], selectedLane: interaction.selectedLane, interactionEnabled: interaction.interactionEnabled && !game.result } };

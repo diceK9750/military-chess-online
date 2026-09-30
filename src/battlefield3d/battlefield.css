@@ -74,3 +74,42 @@
 .app-shell--setup:has(.inventory[open]) { height: auto; min-height: 100dvh; overflow: visible; }
 .app-shell--setup:has(.inventory[open]) > main { overflow: visible; }
 .app-shell--setup:has(.inventory[open]) .setup-screen--3d:not(.has-fallback) .battlefield-stage { min-height: 340px; }
+.intelligence-panel { border:1px solid #b8c6bd; border-radius:10px; padding:6px 10px; background:#f5f1e6; flex:0 0 auto; font-size:12px; }
+.intelligence-heading { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.intelligence-heading button { min-height:32px; margin-left:auto; font-size:12px; padding:4px 8px; }
+.intelligence-heading small { color:#4d6b72; }
+.intelligence-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:6px; }
+.intelligence-cards article { border-left:2px solid #84b9c1; padding:5px 7px; background:#edf3ef; }
+.intelligence-cards ul { padding-left:15px; margin:4px 0; }
+.intelligence-metrics { margin:6px 0; }
+.hypothesis { padding:8px; background:#e6f0ee; line-height:1.5; }
+.enemy-analysis .actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); max-height:150px; overflow:auto; }
+.enemy-analysis .actions button { width:100%; min-width:0; white-space:nowrap; }
+.app-shell--playing:has(.intelligence-panel.is-active) { height:auto; min-height:100dvh; overflow:visible; }
+.app-shell--playing:has(.intelligence-panel.is-active)>main { overflow:visible; }
+.app-shell--playing:has(.intelligence-panel.is-active) .game-surfaces { height:auto; }
+.app-shell--playing:has(.intelligence-panel.is-active) .battlefield-stage { min-height:380px; }
+/* Optional analysis must never shrink emergency touch targets. */
+.game-surfaces.has-fallback:has(.intelligence-panel) .board { min-height:373px; }
+.game-surfaces.has-fallback:has(.intelligence-panel) .cell { min-height:44px; }
+.audio-controls { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.sound-controls button { min-height:36px; font-size:12px; padding:5px 10px; }
+.first-guide { color:#44656b; padding:2px 8px; }
+.chronicle { max-width:1100px; margin:auto; padding:12px; background:#efe5ce; border:2px solid #a48a5d; border-radius:10px; }
+.chronicle-heading { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.chronicle-heading small { display:block; font-size:10px; font-weight:normal; }
+.chronicle-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+.chronicle-slider { display:flex; align-items:center; gap:12px; white-space:nowrap; }
+.chronicle-slider input { width:100%; }
+.chronicle .battlefield-stage { height:clamp(340px,55vh,600px); flex:auto; }
+.app-shell--playing:has(.chronicle) { height:auto; min-height:100dvh; overflow:visible; }
+.app-shell--playing:has(.chronicle)>main { overflow:visible; }
+.app-shell--playing:has(.result) { height:auto; min-height:100dvh; overflow:visible; }
+.app-shell--playing:has(.result)>main { overflow:visible; }
+.app-shell--playing:has(.result) .game-surfaces { height:auto; }
+.app-shell--playing:has(.result) .battlefield-stage { min-height:380px; }
+/* Keep emergency Board touch targets and confirmation clear of the history row. */
+.app-shell--playing:has(.game-surfaces.has-fallback .intelligence-panel):has(.confirm) { height:auto; min-height:100dvh; overflow:visible; }
+.app-shell--playing:has(.game-surfaces.has-fallback .intelligence-panel):has(.confirm)>main { overflow:visible; }
+.game-surfaces.has-fallback:has(.intelligence-panel):has(.confirm) { height:auto; }
+.game-surfaces.has-fallback:has(.intelligence-panel):has(.confirm) .play-main { flex:0 0 auto; }
