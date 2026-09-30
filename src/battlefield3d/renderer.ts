@@ -431,7 +431,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         }
         const start = performance.now();
         animateFrame = now => {
-          const progress = Math.min(1, (now - start) / profile.duration);
+          const progress = Math.min(1, (now - start) / (profile.duration * (next.phase === 'replay' ? 1.5 : 1)));
           const travel=profile.easing==='rush'?1-Math.pow(1-progress,2):profile.easing==='heavy'?progress*progress*(3-2*progress):progress;
           moving.position.set((from.x - to.x) * (1 - travel), Math.sin(progress * Math.PI) * profile.height, (from.z - to.z) * (1 - travel));
           if (progress === 1 && ghost) moving.clear();

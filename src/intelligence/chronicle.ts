@@ -14,8 +14,8 @@ export function chronicleFrames(final:GameState,initial:{readonly p1:readonly Pi
   if(JSON.stringify(state)!==JSON.stringify(final))throw new RuleError('REPLAY_MISMATCH');
   return frames;
 }
-export function chronicleView(frame:GameState,finishedSource:GameState) {
+export function chronicleView(frame:GameState,finishedSource:GameState,initialPieces:readonly Piece[] = []) {
   if(!finishedSource.result)throw new RuleError('REPLAY_NOT_FINISHED');
   // Finished-source permission applies to every historical frame; never change the replay's game state.
-  return toBattlefieldView({...frame,result:finishedSource.result},1);
+  return { ...toBattlefieldView({...frame,result:finishedSource.result},1,undefined,undefined,initialPieces), phase: 'replay' as const };
 }

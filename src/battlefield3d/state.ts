@@ -7,7 +7,7 @@ export type BattlefieldPiece = { readonly owner: Player; readonly position: Site
 export interface BattlefieldViewState {
   readonly battleOutcome?: Outcome;
   readonly analysis?: BattlefieldAnalysis;
-  readonly phase?: 'setup';
+  readonly phase?: 'setup' | 'replay';
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;
