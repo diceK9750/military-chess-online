@@ -28,6 +28,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   scene.background = new THREE.Color('#24383d');
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
   const controls = new OrbitControls(camera, canvas);
+  controls.enabled = false; // Presets alone move the camera; gestures belong to pieces or page scrolling.
+  controls.enableRotate = false;
+  controls.enableZoom = false;
   controls.enablePan = false;
   controls.enableDamping = false; // Event-driven frames, no idle animation loop.
   controls.minPolarAngle = 0;
@@ -53,10 +56,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   let effectsFrame: ((now:number)=>boolean)|undefined;
   let restoreFocus: (() => void) | undefined;
   let lastManual=-Infinity;
-  let dragStart:{id:number;x:number;y:number}|null=null;
   let pieceDrag: { id: number; from: Site; x: number; y: number; active: boolean; moveCount: number } | null = null;
   const dragGhost = new THREE.Group(); scene.add(dragGhost);
   const pointerIds = new Set<number>();
+  let scrollTouch: { id: number; y: number } | null = null;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = initial;
   let disposed = false;
@@ -116,16 +119,21 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     if (preset === 'top') {
       controls.target.set(0, .25, 0);
       camera.position.set(0, fullCameraDistance(camera.aspect, true), side * .001);
-    } else if (preset === 'front' || preset === 'selected') {
-      const point = preset === 'selected' && state.interaction.selectedSite ? sitePoint(state.interaction.selectedSite) : { x: 0, z: side * 2 };
+    } else if (preset === 'front' || preset === 'enemy' || preset === 'selected') {
+      const point = preset === 'selected' && state.interaction.selectedSite ? sitePoint(state.interaction.selectedSite) : { x: 0, z: (preset === 'enemy' ? -side : side) * 2 };
       const near = Math.min(24, Math.max(7, 7 / camera.aspect));
       controls.target.set(point.x, .3, point.z);
-      camera.position.set(point.x, near * .78, point.z + side * near * .7);
+      camera.position.set(point.x, near * .78, point.z + (preset === 'enemy' ? -side : side) * near * .7);
     } else {
-      controls.target.set(0, .25, 0);
-      camera.position.set(0, distance * .86, side * distance * .6);
+      const from = preset === 'last' && state.lastMove ? sitePoint(state.lastMove.from) : { x: 0, z: 0 };
+      const to = preset === 'last' && state.lastMove ? sitePoint(state.lastMove.to) : from;
+      const x = (from.x + to.x) * .25, z = (from.z + to.z) * .25;
+      controls.target.set(x, .25, z);
+      camera.position.set(x, distance * .86, z + side * distance * .6);
     }
-    controls.update(); requestDraw();
+    controls.update(); canvas.dataset.cameraPreset = preset;
+    canvas.dataset.cameraPose = camera.position.toArray().join('/') + '/' + controls.target.toArray().join('/');
+    requestDraw();
   }
   function reset() { setCamera('full',true); }
   function resize() {
@@ -152,21 +160,22 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     return hit;
   }
   function cancelDrag() {
-    pieceDrag = null; dragGhost.clear(); controls.enableRotate = true;
-    canvas.style.cursor='grab';
+    pieceDrag = null; dragGhost.clear();
+    canvas.style.cursor='default';
     delete canvas.dataset.dragging; requestDraw();
   }
   function down(event: PointerEvent) {
     if (event.button !== 0) return;
     pointerIds.add(event.pointerId);
     gesture.down(event.pointerId, event.clientX, event.clientY);
-    if (pointerIds.size > 1) { cancelDrag(); lastManual = performance.now(); return; }
-    dragStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    if (pointerIds.size > 1) { cancelDrag(); scrollTouch=null; return; }
     const site = pick(event)?.object.userData.site as Site | undefined;
     const own = state.pieces.find(p => p.position === site && p.owner === state.viewer && !p.unknown);
     if (own && state.interaction.interactionEnabled && !animateFrame && !effectsFrame && handlers.onPieceDrop) {
       pieceDrag = { id: event.pointerId, from: own.position, x: event.clientX, y: event.clientY, active: false, moveCount: state.moveCount };
-      controls.enableRotate = false; canvas.setPointerCapture(event.pointerId);
+      canvas.setPointerCapture(event.pointerId);
+    } else if (event.pointerType === 'touch') {
+      scrollTouch = { id: event.pointerId, y: event.clientY };
     }
   }
   function movePointer(event: PointerEvent) {
@@ -186,18 +195,18 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       }
       return;
     }
-    if(dragStart&&Math.hypot(event.clientX-dragStart.x,event.clientY-dragStart.y)>6)lastManual=performance.now();
-    if (!pointerIds.size) canvas.style.cursor = state.interaction.interactionEnabled && pick(event) ? 'pointer' : 'grab';
+    if (scrollTouch?.id === event.pointerId) { window.scrollBy(0, scrollTouch.y - event.clientY); scrollTouch.y=event.clientY; }
+    if (!pointerIds.size) canvas.style.cursor = state.interaction.interactionEnabled && pick(event) ? 'pointer' : 'default';
   }
-  function wheel(){lastManual=performance.now();}
-  function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); pointerIds.delete(event.pointerId); dragStart=null; cancelDrag(); }
+  function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); pointerIds.delete(event.pointerId); scrollTouch=null; cancelDrag(); }
   function up(event: PointerEvent) {
     pointerIds.delete(event.pointerId);
+    scrollTouch=null;
     const drag = pieceDrag;
     if (drag?.id === event.pointerId) {
-      const hit = pick(event, true); cancelDrag(); canvas.style.cursor='grab';
+      const hit = pick(event, true); cancelDrag();
       if (drag.active) {
-        gesture.cancel(event.pointerId); dragStart=null;
+        gesture.cancel(event.pointerId);
         if (state.interaction.interactionEnabled && !animateFrame && !effectsFrame && state.moveCount === drag.moveCount && hit) {
           const to = hit.object.userData.site as Site;
           const lane = drag.from.startsWith('HQ') && to.startsWith('HQ') ? hit.point.x < 0 ? 'C' : 'D' : undefined;
@@ -206,7 +215,6 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         return;
       }
     }
-    dragStart=null;
     if (!gesture.up(event.pointerId, event.clientX, event.clientY) || !state.interaction.interactionEnabled || animateFrame || effectsFrame) return;
     const hit = pick(event);
     if (!hit) return;
@@ -219,7 +227,6 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     canvas.removeEventListener('webglcontextlost', lost);
     canvas.removeEventListener('pointerdown', down, true); canvas.removeEventListener('pointermove', movePointer);
     canvas.removeEventListener('pointerup', up, true); canvas.removeEventListener('pointercancel', cancelPointer, true);
-    canvas.removeEventListener('wheel',wheel);
     controls.removeEventListener('change', requestDraw); controls.dispose();
     geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose());
     scene.clear(); labelCache.clear(); backend.dispose(); canvas.remove();
@@ -280,6 +287,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const shovel=geometry(new THREE.BoxGeometry(.15,.14,.05));
     const flagCloth=geometry(new THREE.BoxGeometry(.45,.28,.035));
     const mineDevice=geometry(new THREE.CylinderGeometry(.27,.32,.2,8));
+    const rankBases = [geometry(new THREE.BoxGeometry(.65,.06,.65)), geometry(new THREE.CylinderGeometry(.36,.36,.06,16)), geometry(new THREE.CylinderGeometry(.39,.39,.08,6))];
+    const rankPip = geometry(new THREE.IcosahedronGeometry(.075,0));
+    const rankBand = geometry(new THREE.BoxGeometry(.47,.055,.1));
+    const capPeak = geometry(new THREE.BoxGeometry(.35,.045,.22));
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
     for (const owner of [1, 2] as const) {
       const z = owner === 1 ? 4.1 : -4.1, surface = owner === state.viewer ? blue : red;
@@ -342,7 +353,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           const object = mesh(shape, surface, x + dx, .2 + (y-.2)*stature, z + dz, group);
           object.userData = { site: piece.position }; return object;
         };
-        if (piece.unknown || piece.type !== 'mine') {
+        if (piece.unknown || !['mine','aircraft','tank','flag'].includes(piece.type)) {
           part(body, uniform, 0, .4);
           part(headShape, skin, 0, .63);
           part(helmet, uniform, 0, .74);
@@ -356,18 +367,25 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           if (style.rank) {
             const family = Math.ceil(style.rank / 3), tier = (style.rank - 1) % 3 + 1;
             const accent = family === 3 ? brass : family === 2 ? silver : pale;
+            part(rankBases[family-1],accent,0,.24);
+            // Large, non-text insignia repeat the 3/2/1 tier on the base and helmet.
+            for(let i=0;i<tier;i++) part(rankPip,accent,(i-(tier-1)/2)*.18,.3,.3);
+            part(capPeak,accent,0,.77,.08).scale.set(family===3?1.2:1,family===3?2:1,1);
+            if(family===2)for(let i=0;i<tier;i++)part(rankBand,accent,0,.35+i*.085,.2);
+            if(family===1)part(helmet,pale,0,.78).scale.set(1.25,1,1.25);
             // Family silhouettes: tall crested generals, broad epauletted colonels, compact officers.
             part(body, uniform, 0, .43).scale.set(family === 2 ? 1.55 : 1.15, family === 3 ? 1.55 : 1, 1);
             for (let i = 0; i < tier; i++) {
               part(insignia, accent, (i-(tier-1)/2)*.13, .53, .22).scale.set(1.25,1.4,1);
               const crest = part(insignia, accent, (i-(tier-1)/2)*.15, family === 3 ? .89 : .81);
-              crest.scale.set(1, family === 3 ? 3.2 : family === 2 ? 1.8 : 1, 1.5);
+              crest.scale.set(1.6, family === 3 ? 4.4 : family === 2 ? 2.2 : 1.2, 2.2);
             }
             for (const side of [-1,1]) part(equipment,accent,side*.2,.57).scale.set(.65,family===2?1.7:1,.8);
             if (family === 3) { part(cloak,accent,0,.38,-.16).scale.set(1.2,1.5,.65); part(tool,brass,.28,.48).rotation.z=-.3; }
           } else if (piece.type === 'aircraft') {
-            part(fuselage, silver, 0, .61).rotation.x=Math.PI/2;
-            part(equipment,silver,0,.65).scale.set(2.1,1,2);
+            part(fuselage, silver, 0, .56).rotation.x=Math.PI/2;
+            part(equipment,silver,0,.6).scale.set(2.65,1,2.3);
+            part(headShape,uniform,0,.67).scale.set(.8,.65,1.2);
             part(equipment,brass,0,.78,-.23).scale.set(.8,2,1);
             part(propeller,dark,0,.61,.27);
           } else if (piece.type === 'tank') {
@@ -376,9 +394,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
             part(helmet,olive,0,.62).scale.set(1.3,1.5,1.3);
             const barrel=part(tool,brass,0,.61,.25);barrel.rotation.x=Math.PI/2;barrel.scale.y=1.3;
           } else if (piece.type === 'engineer') {
-            part(helmet,amber,0,.77).scale.set(1.2,1,1.2);
+            part(helmet,amber,0,.77).scale.set(1.5,1.8,1.5);
             part(armor,wood,0,.39,-.16).scale.set(.9,.9,.65);
-            part(tool,silver,.27,.46).rotation.z=-.35;part(equipment,silver,.33,.67).scale.set(.7,1,1);
+            part(tool,silver,.27,.46).rotation.z=-.35;part(equipment,silver,.33,.67).scale.set(.9,1.6,1);
             part(tool,wood,-.27,.45).rotation.z=.3;part(shovel,silver,-.33,.25);
           } else if (piece.type === 'cavalry') {
             part(horse,wood,0,.38).scale.set(1.2,1.2,1.3);
@@ -386,11 +404,11 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
             part(cloak,wood,0,.59,.23).scale.set(.55,1.1,.75);part(headShape,wood,0,.79,.25).scale.set(.85,1,1.5);
             part(tool,brass,-.28,.66).scale.y=1.7;
           } else if (piece.type === 'spy') {
-            part(cloak,violet,0,.4).scale.set(1.4,1.7,1.1);part(cloak,dark,0,.77).scale.set(.9,.8,.9);
+            part(cloak,violet,0,.4).scale.set(1.6,2,1.3);part(cloak,dark,0,.77).scale.set(1.1,1.2,1.1);
             part(insignia,silver,0,.64,.14).scale.x=2.1;
           } else if (piece.type === 'flag') {
-            part(pole,wood,.24,.6).scale.y=1.2;
-            part(flagCloth,brass,.33,.89);part(insignia,uniform,.33,.89,.03).scale.set(2.5,2.5,1);
+            part(pole,wood,-.2,.67).scale.y=1.3;
+            part(flagCloth,brass,.02,.94).scale.set(1.4,1.15,1);part(insignia,uniform,.02,.94,.03).scale.set(3,3,1);
           } else if (piece.type === 'mine') {
             // A device silhouette, rather than another standing infantryman.
             part(mineDevice,dark,0,.31);for(let i=0;i<6;i++){const angle=i/6*Math.PI*2;part(insignia,amber,Math.cos(angle)*.22,.36,Math.sin(angle)*.22).scale.y=2;}
@@ -453,7 +471,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         };
       } else if(next.moveCount!==previous.moveCount&&!transition){restoreFocus?.();fxGroup.clear();effectsFrame=undefined;delete canvas.dataset.battleEffect;}
       animationStatus(!!animateFrame || !!effectsFrame);
-      if (cameraPreset === 'selected' || next.viewer !== previous.viewer) setCamera(cameraPreset);
+      if (cameraPreset === 'selected' || cameraPreset === 'last' || next.viewer !== previous.viewer) setCamera(cameraPreset === 'selected' && !next.interaction.selectedSite ? 'full' : cameraPreset);
       const interaction = state.interaction;
       canvas.dataset.analysisCount=String(state.analysis?.hypotheses.length??0);
       if(state.analysis) {
@@ -494,6 +512,14 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const shaft = mesh(arrowShaft, arrowMaterial, (from.x + to.x) / 2, 0.65, (from.z + to.z) / 2, units);
         shaft.scale.y = length; shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
         const head = mesh(arrowHead, arrowMaterial, to.x, 0.65, to.z, units); head.quaternion.copy(shaft.quaternion);
+        for (const [point, text] of [[from, '発'], [to, '着']] as const) {
+          const mark = mesh(ring, arrowMaterial, point.x, .15, point.z, overlays); mark.rotation.x = -Math.PI / 2;
+          const tag = mesh(geometryTag, label(text, '#272b29', '#f7d57a', true), point.x, .38, point.z - .3, overlays);
+          tag.renderOrder=4; billboards.push(tag);
+        }
+        canvas.dataset.lastMove = `${state.lastMove.from}/${state.lastMove.to}`;
+      } else {
+        delete canvas.dataset.lastMove;
       }
       requestDraw();
     }
@@ -501,7 +527,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     host.append(canvas); canvas.addEventListener('webglcontextlost', lost);
     canvas.addEventListener('pointerdown', down, true); canvas.addEventListener('pointermove', movePointer);
     canvas.addEventListener('pointerup', up, true); canvas.addEventListener('pointercancel', cancelPointer, true);
-    canvas.addEventListener('wheel',wheel,{passive:true});
+    canvas.style.touchAction = 'none'; // Own-piece touch drag stays captured; blank-area touch scrolls the page.
     controls.addEventListener('change', requestDraw);
     // Do not mutate canvas dimensions inside a ResizeObserver delivery cycle.
     observer = new ResizeObserver(() => {

@@ -220,6 +220,7 @@ test('camera drag cannot select or commit; reset and repeated mounts release Web
   const position = { x: area.x + 15, y: area.y + area.height * .6 };
   await page.mouse.move(position.x, position.y); await page.mouse.down();
   await page.mouse.move(position.x + 80, position.y + 30, { steps: 8 }); await page.mouse.up();
+  await expect(canvas).toHaveAttribute('data-camera-preset','full');
   await expect(page.locator('.battlefield-selection')).toContainText('青＝自軍 / 赤＝敵軍');
   expect(await page.locator('.badge').first().textContent()).toBe(count);
   await page.getByRole('button', { name: '視点を戻す' }).click();
@@ -267,7 +268,7 @@ async function fallbackSetup(page: Page) {
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
 }
 
-test('3D setup presets, drag and zoom never change placement; top-down picking still swaps', async ({ page, isMobile }, info) => {
+test('3D fixed presets replace drag and zoom without changing placement; top-down picking still swaps', async ({ page, isMobile }, info) => {
   await trackBoard(page);
   await page.goto(entry);
   await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
@@ -290,12 +291,15 @@ test('3D setup presets, drag and zoom never change placement; top-down picking s
   await expect(page.locator('.selection-panel')).toHaveCount(0);
   await canvas.scrollIntoViewIfNeeded();
   const beforeZoom = await canvas.screenshot();
+  const pose = await canvas.getAttribute('data-camera-pose');
   const box = (await canvas.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(100);
-  expect((await canvas.screenshot()).equals(beforeZoom)).toBe(false);
+  expect((await canvas.screenshot()).equals(beforeZoom)).toBe(true);
+  await expect(canvas).toHaveAttribute('data-camera-pose',pose!);
   await expect(page.locator('.selection-panel')).toHaveCount(0);
+  await expect(canvas).toHaveAttribute('data-camera-pose',pose!);
   const cdp = await page.context().newCDPSession(page);
   const x = box.x + box.width / 2, y = box.y + box.height / 2;
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 1 }, { x: x + 30, y, id: 2 }] });
@@ -383,6 +387,8 @@ test('touch camera gestures do not select, canvas retains scroll, and idle rende
   expect(await page.locator('.cell.selected').count()).toBe(0);
   expect(await page.evaluate(() => scrollY)).toBe(before);
   await page.getByRole('button', { name: '視点を戻す' }).click();
+  await expect(canvas).not.toHaveAttribute('data-battle-effect',/./);
+  await expect(page.locator('.battlefield-turn')).not.toContainText('表示中');
   await page.waitForTimeout(450);
   const frames = () => page.evaluate(() => (window as unknown as { battlefieldTestFrames: { frames: number } }).battlefieldTestFrames.frames);
   const settled = await frames();

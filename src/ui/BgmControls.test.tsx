@@ -13,7 +13,7 @@ test('audio is off, unloaded until a gesture, and can stop; preferences persist'
   fireEvent.click(screen.getByRole('button', { name: 'BGM ONにする' }));
   await screen.findByRole('button', { name: 'BGM OFFにする' });
   expect(audio.volume).toBe(.4); expect(audio).toHaveAttribute('src', '/audio/shenyang.mp3');
-  expect(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)!)).toEqual({ enabled: true, volume: .4 });
+  await waitFor(() => expect(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)!)).toEqual({ enabled: true, volume: .4 }));
   fireEvent.click(screen.getByRole('button', { name: 'BGM OFFにする' }));
   expect(audio.pause).toHaveBeenCalled(); expect(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)!).enabled).toBe(false);
 });

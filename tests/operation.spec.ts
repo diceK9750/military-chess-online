@@ -43,6 +43,33 @@ async function setup(page:Page) {
 async function tap(page:Page,site:Site,touch:boolean) {const p=await point(page,site);if(touch)await page.touchscreen.tap(p.x,p.y);else await page.mouse.click(p.x,p.y);}
 async function saved(page:Page) { return page.evaluate(()=>JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!)); }
 
+test('fixed presets, selection focus and cancellation never alter the setup',async({page,isMobile})=>{
+  await setup(page);const before=await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'));
+  await expect(page.getByRole('button',{name:'直前の手を追う'})).toBeDisabled();
+  for(const [name,preset] of [['自軍正面','front'],['敵軍正面','enemy'],['真上','top'],['全景','full']]){
+    const button=page.getByRole('button',{name,exact:true});await button.click();
+    await expect(button).toHaveAttribute('aria-pressed','true');await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
+  }
+  await tap(page,'B1',!!isMobile);await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
+  await expect(canvas(page)).toHaveAttribute('data-camera-preset','selected');
+  await page.getByRole('button',{name:'選択を解除',exact:true}).click();
+  await expect(canvas(page)).toHaveAttribute('data-camera-preset','full');
+  await expect(page.getByRole('button',{name:'全景',exact:true})).toHaveAttribute('aria-pressed','true');
+  expect(await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'))).toBe(before);
+});
+test('blank touch drag scrolls the page without camera rotation or setup change',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await setup(page);await canvas(page).scrollIntoViewIfNeeded();
+  const before=await page.evaluate(()=>({scroll:scrollY,setup:localStorage.getItem('military-chess:cpu-setup:v1')}));
+  const pose=await canvas(page).getAttribute('data-camera-pose'),b=(await canvas(page).boundingBox())!,x=b.x+8,y=b.y+b.height*.5;
+  const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});
+  for(let i=1;i<=6;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-i*12,id:1}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+  expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(before.scroll);
+  expect(await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'))).toBe(before.setup);
+  await expect(canvas(page)).toHaveAttribute('data-camera-pose',pose!);await expect(page.locator('.selection-panel')).toHaveCount(0);
+});
+
 for(const [width,height] of [[1920,1080],[1440,900],[1280,720],[430,932],[390,844]]) {
   test(`own 23-piece identity and HQ affiliation ${width}x${height}`,async({page},info)=>{
     await page.setViewportSize({width,height});await setup(page);

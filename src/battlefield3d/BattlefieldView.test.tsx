@@ -241,3 +241,24 @@ test('complete CPU game from 3D setup to terminal through 3D callbacks alone, wi
     expect(screen.getByText('コンピューターの初期配置')).toBeInTheDocument();
   } finally { vi.useRealTimers(); }
 });
+
+test.each([
+  [{ winner: 1, reason: 'HQ_CAPTURE' }, 'あなたの勝利', 'あなたがコンピューターの司令部を占領'],
+  [{ winner: 2, reason: 'CAPTURERS_ELIMINATED' }, 'あなたの敗北', 'あなたの司令部占領可能駒が全滅'],
+  [{ winner: null, reason: 'BOTH_CAPTURERS_ELIMINATED' }, '引き分け', '双方の占領可能駒が全滅'],
+  [{ winner: null, reason: 'NO_LEGAL_MOVES_BOTH' }, '引き分け', '双方に合法手なし'],
+  [{ winner: null, reason: 'FIFTY_NONCOMBAT_MOVES' }, '引き分け', '戦闘なし50手'],
+] as const)('battlefield result %j is prominent, named and noninteractive', async (result, label, reason) => {
+  const initial = scenario('highFlight');
+  render(<LocalGame mode="cpu" initial={{ ...initial, result, turn: null }} onNewGame={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(mock.create).toHaveBeenCalled());
+  const panel = screen.getByRole('status', { name: '対局結果' });
+  expect(panel).toHaveTextContent(label);
+  expect(panel).toHaveTextContent(reason);
+  expect(panel.parentElement).toHaveClass('battlefield-stage');
+  expect(screen.getByRole('button', { name: '新しい対局' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: '結果を保存' })).toBeEnabled();
+  expect(latest().interaction.interactionEnabled).toBe(false);
+  act(() => input().onPieceDrop?.('D5', 'HQ-P2'));
+  expect(latest().moveCount).toBe(0);
+});

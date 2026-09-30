@@ -84,12 +84,12 @@ test('current sites exclude removed pieces and use exactly one HQ occupant', () 
   expect(view.pieces.filter(piece => piece.position === 'HQ-P2')).toHaveLength(1);
   expect(view.pieces.some(piece => piece.position === 'D7')).toBe(false);
 });
-test('latest public move copies only endpoints, even after a system event', () => {
+test('latest public move copies endpoints, actor and used lane, even after a system event', () => {
   const view = toBattlefieldView({ ...scenario('highFlight'), moveCount: 1, events: [
     { kind: 'MOVE', actor: 1, move: { from: 'HQ-P1', to: 'HQ-P2', lane: 'C' }, moveNumber: 1, battle: 'ATTACKER' },
     { kind: 'AUTO_PASS', actor: 2 },
   ] }, 1);
-  expect(view.lastMove).toEqual({ from: 'HQ-P1', to: 'HQ-P2' });
+  expect(view.lastMove).toEqual({ from: 'HQ-P1', to: 'HQ-P2', actor: 1, lane: 'C' });
   expect(view.moveCount).toBe(1);
 });
 test.each(SITES)('%s has the canonical board position, with merged HQ centered', site => {
@@ -105,4 +105,25 @@ test('46 unique centers and exactly two bridges; P1 is toward the camera +Z', ()
     expect(sitePoint(bridge.to)).toEqual({ x: sitePoint(bridge.from).x, z: -0.5 });
   }
   expect(sitePoint('A1').z).toBeGreaterThan(sitePoint('A8').z);
+});
+
+test('last moving own piece remains named after its removal and a save round trip', () => {
+  const initial = scenario('highFlight');
+  const game: GameState = { ...initial, moveCount: 1, pieces: initial.pieces.map(p => p.position === 'D5' ? { ...p, position: null } : p), events: [{ kind: 'MOVE', actor: 1, move: { from: 'D5', to: 'HQ-P2' }, moveNumber: 1, battle: 'DEFENDER' }] };
+  for (const restored of [game, JSON.parse(JSON.stringify(game)) as GameState]) {
+    const view = toBattlefieldView(restored, 1, undefined, undefined, initial.pieces);
+    expect(view.lastMove).toEqual({ from: 'D5', to: 'HQ-P2', actor: 1, type: 'aircraft' });
+    initial.pieces.forEach(p => expect(JSON.stringify(view)).not.toContain(p.id));
+  }
+});
+test('CPU last mover never discloses enemy type before termination, even with complete initial placements', () => {
+  const initial = scenario('highFlight');
+  const game: GameState = { ...initial, moveCount: 1, events: [{ kind: 'MOVE', actor: 2, move: { from: 'A7', to: 'A6' }, moveNumber: 1, battle: null }], pieces: initial.pieces.map(p => p.position === 'A7' ? { ...p, position: 'A6' } : p) };
+  const view = toBattlefieldView(game, 1, undefined, undefined, initial.pieces);
+  expect(view.lastMove).toEqual({ from: 'A7', to: 'A6', actor: 2 });
+  const changed = initial.pieces.map(p => p.owner === 2 ? { ...p, type: 'mine' as const, id: 'hidden-'+p.id } : p);
+  expect(toBattlefieldView({ ...game, pieces: game.pieces.map(p => p.owner === 2 ? { ...p, type: 'mine', id: 'changed' } : p) }, 1, undefined, undefined, changed)).toEqual(view);
+  const finished = toBattlefieldView({ ...game, result: { winner: null, reason: 'FIFTY_NONCOMBAT_MOVES' }, turn: null }, 1, undefined, undefined, initial.pieces);
+  expect(finished.lastMove).toHaveProperty('type', initial.pieces.find(p => p.position === 'A7')!.type);
+  expect(finished.result).toEqual({ winner: null, reason: 'FIFTY_NONCOMBAT_MOVES' });
 });

@@ -1,5 +1,5 @@
 import { SITES, anchors } from '../game/board';
-import type { GameState, Move, Outcome, Piece, PieceType, Player, Site } from '../game/types';
+import type { GameState, Move, Outcome, Piece, PieceType, Player, Result, Site } from '../game/types';
 
 export type BattlefieldPiece = { readonly owner: Player; readonly position: Site } & (
   { readonly unknown: true } | { readonly unknown: false; readonly type: PieceType }
@@ -11,9 +11,11 @@ export interface BattlefieldViewState {
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;
+  readonly result?: Result;
+  readonly playerTurn?: Player | null;
   readonly battleSite: Site | null;
   readonly pieces: readonly BattlefieldPiece[];
-  readonly lastMove: { readonly from: Site; readonly to: Site } | null;
+  readonly lastMove: { readonly from: Site; readonly to: Site; readonly actor?: Player; readonly type?: PieceType; readonly lane?: 'C' | 'D' } | null;
   readonly interaction: BattlefieldInteraction;
 }
 export interface BattlefieldAnalysis { readonly routes: readonly Move[]; readonly hypotheses: readonly {position:Site;count:number}[]; readonly focusSite: Site|null }
@@ -32,7 +34,7 @@ export interface BattlefieldHandlers {
   onPieceDrop?(from: Site, to: Site, lane?: 'C' | 'D'): void;
   onAnimationChange?(active: boolean): void;
 }
-export type CameraPreset = 'full' | 'top' | 'front' | 'selected';
+export type CameraPreset = 'full' | 'top' | 'front' | 'enemy' | 'selected' | 'last';
 const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };
 
 /** Setup has no CPU placement or GameState. Copy only human pieces and public interaction. */
@@ -49,8 +51,22 @@ export function toSetupBattlefieldView(pieces: readonly Piece[], selected: Site 
 }
 
 /** Copy allowlisted fields; never retain original objects or internal IDs. */
-export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle, analysis?: BattlefieldAnalysis): BattlefieldViewState {
+export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle, analysis?: BattlefieldAnalysis, initialPieces: readonly Piece[] = []): BattlefieldViewState {
   const last = [...game.events].reverse().find(event => event.kind === 'MOVE');
+  // Track only disclosed types through public events, including a mover removed in its last battle.
+  const known = new Map<Site, PieceType>(initialPieces.filter(p => p.position && (p.owner === viewer || game.result !== null)).map(p => [p.position!, p.type]));
+  let lastType: PieceType | undefined;
+  for (const event of game.events) {
+    if (event.kind !== 'MOVE') continue;
+    const type = known.get(event.move.from);
+    if (event === last) lastType = type;
+    known.delete(event.move.from);
+    if (event.battle !== 'DEFENDER') known.delete(event.move.to);
+    if (type && event.battle !== 'DEFENDER' && event.battle !== 'MUTUAL') known.set(event.move.to, type);
+  }
+  if (!lastType && last && (last.actor === viewer || game.result !== null) && last.battle !== 'DEFENDER' && last.battle !== 'MUTUAL') {
+    lastType = game.pieces.find(p => p.position === last.move.to && p.owner === last.actor)?.type;
+  }
   const pieces: BattlefieldPiece[] = [];
   // Site order removes correlations with internal IDs and placement order.
   for (const position of SITES) {
@@ -61,7 +77,8 @@ export function toBattlefieldView(game: GameState, viewer: Player, interaction: 
       : { owner: piece.owner, position, unknown: true });
   }
   return { ...(last?.battle?{battleOutcome:last.battle}:{}), ...(analysis?{analysis:{routes:analysis.routes.map(m=>({from:m.from,to:m.to,...(m.lane?{lane:m.lane}:{})})),hypotheses:analysis.hypotheses.map(h=>({position:h.position,count:h.count})),focusSite:analysis.focusSite}}:{}), viewer, moveCount: game.moveCount, finished: game.result !== null, battleSite: last?.battle ? last.move.to : null, pieces,
-    lastMove: last ? { from: last.move.from, to: last.move.to } : null,
+    playerTurn: game.turn, ...(game.result ? { result: { winner: game.result.winner, reason: game.result.reason } } : {}),
+    lastMove: last ? { from: last.move.from, to: last.move.to, actor: last.actor, ...(last.move.lane ? { lane: last.move.lane } : {}), ...(lastType ? { type: lastType } : {}) } : null,
     interaction: { selectedSite: interaction.selectedSite, legalTargets: [...interaction.legalTargets], pendingSite: interaction.pendingSite,
       laneCandidates: [...interaction.laneCandidates], selectedLane: interaction.selectedLane, interactionEnabled: interaction.interactionEnabled && !game.result } };
 }
