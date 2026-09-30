@@ -207,6 +207,7 @@ test('a new CPU game saves a selected formation and reopening setup preserves it
   render(<App />); const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: /コンピューターと対戦/ }));
   await user.click(screen.getByRole('button', { name: /^かんたん/ }));
+  await waitFor(() => expect(document.querySelector('.board')).not.toBeNull());
   const saved = JSON.parse(localStorage.getItem(SETUP_STORAGE_KEY)!);
   expect(saved.pieces).toEqual(generateFormationPlacement(1, saved.cpuSeed, 'human'));
   const before = saved.pieces;
@@ -218,6 +219,7 @@ test('a new CPU game saves a selected formation and reopening setup preserves it
   cleanup(); render(<App />);
   await user.click(screen.getByRole('button', { name: '続きから' }));
   expect(JSON.parse(localStorage.getItem(SETUP_STORAGE_KEY)!).pieces).toEqual(edited);
+  await waitFor(() => expect(document.querySelector('.board')).not.toBeNull());
   expect(screen.getByRole('button', { name: /^B1 P1/ })).toHaveAttribute('aria-label', editedLabel);
 });
 test('draft swaps autosave, READY blocks edits, unlock restores, both ready starts', async () => {
@@ -249,6 +251,7 @@ test('CPU setup confirms one human placement and produces a valid full game', as
   const onStart = vi.fn();
   const store = { load: () => null, save: vi.fn(() => true) };
   render(<CpuSetup difficulty="normal" seed={9751} onStart={onStart} store={store} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const user = userEvent.setup();
   expect(screen.queryByRole('combobox', { name: '配置する側' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: /B1 P1/ }));
@@ -273,6 +276,7 @@ test('CPU match hides opponent types and automatically takes its turn', async ()
 
 test('CPU setup shows all 23 pieces, legal exchanges and a specific forbidden-placement reason', async () => {
   const { container } = render(<CpuSetup difficulty="easy" seed={2} onStart={vi.fn()} store={{ load: () => null, save: () => true }} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const user = userEvent.setup();
   expect(screen.getByText('✓ 配置完了。この配置で対局を始められます。')).toBeInTheDocument();
   await user.click(screen.getByText('自軍の駒一覧・枚数を見る'));
@@ -297,6 +301,7 @@ test('setup board and inventory show the same icon above every formal piece name
     ['mine', '地雷', '💣'], ['cavalry', '騎兵', '🐎'], ['spy', 'スパイ', '🕵️'], ['flag', '軍旗', '🚩'],
   ] as const;
   const { container } = render(<CpuSetup difficulty="easy" seed={2} onStart={vi.fn()} store={{ load: () => null, save: () => true }} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const placement = generateFormationPlacement(1, 2, 'human');
   expect(container.querySelectorAll('.board .cell.side-1 .piece-face')).toHaveLength(23);
   for (const [type, name, icon] of expected) {

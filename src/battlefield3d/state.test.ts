@@ -2,7 +2,30 @@ import { expect, test } from 'vitest';
 import { scenario } from '../dev/fixtures';
 import { SITES } from '../game/board';
 import type { GameState } from '../game/types';
-import { BRIDGES, sitePoint, toBattlefieldView } from './state';
+import { BRIDGES, sitePoint, toBattlefieldView, toSetupBattlefieldView } from './state';
+import { generateFormationPlacement } from '../formation/templates';
+
+test('setup exposes exactly 23 named own pieces, never enemy pieces or internal IDs', () => {
+  const own = generateFormationPlacement(1, 9751, 'human');
+  const enemy = generateFormationPlacement(2, 9751, 'cpu');
+  const view = toSetupBattlefieldView([...own, ...enemy], 'B1', ['E1']);
+  expect(view.phase).toBe('setup');
+  expect(view.pieces).toHaveLength(23);
+  expect(view.pieces.every(piece => piece.owner === 1 && !piece.unknown && piece.type)).toBe(true);
+  [...own, ...enemy].forEach(piece => expect(JSON.stringify(view)).not.toContain(piece.id));
+  expect(view).not.toHaveProperty('events');
+  expect(view).not.toHaveProperty('turn');
+});
+
+test('setup payload is detached and independent of enemy types and array order', () => {
+  const own = generateFormationPlacement(1, 9751, 'human');
+  const targets = ['E1' as const];
+  const view = toSetupBattlefieldView(own, 'B1', targets);
+  expect(toSetupBattlefieldView([...own].reverse(), 'B1', targets)).toEqual(view);
+  expect(view.interaction.legalTargets).not.toBe(targets);
+  view.pieces.forEach(piece => expect(own).not.toContain(piece));
+  expect(view.interaction).toMatchObject({ selectedSite: 'B1', legalTargets: ['E1'], pendingSite: null, laneCandidates: [], interactionEnabled: true });
+});
 
 test('allowlists own types and conceals every enemy type and internal ID', () => {
   const game = scenario('highFlight');

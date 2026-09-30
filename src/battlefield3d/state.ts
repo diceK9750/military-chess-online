@@ -1,10 +1,11 @@
 import { SITES, anchors } from '../game/board';
-import type { GameState, PieceType, Player, Site } from '../game/types';
+import type { GameState, Piece, PieceType, Player, Site } from '../game/types';
 
 export type BattlefieldPiece = { readonly owner: Player; readonly position: Site } & (
   { readonly unknown: true } | { readonly unknown: false; readonly type: PieceType }
 );
 export interface BattlefieldViewState {
+  readonly phase?: 'setup';
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;
@@ -26,7 +27,21 @@ export interface BattlefieldHandlers {
   onLaneSelect(lane: 'C' | 'D'): void;
   onAnimationChange?(active: boolean): void;
 }
+export type CameraPreset = 'full' | 'top' | 'front' | 'selected';
 const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };
+
+/** Setup has no CPU placement or GameState. Copy only human pieces and public interaction. */
+export function toSetupBattlefieldView(pieces: readonly Piece[], selected: Site | null, targets: readonly Site[]): BattlefieldViewState {
+  return {
+    phase: 'setup', viewer: 1, moveCount: 0, finished: false, battleSite: null, lastMove: null,
+    pieces: SITES.flatMap(position => {
+      const piece = pieces.find(candidate => candidate.owner === 1 && candidate.position === position);
+      return piece ? [{ owner: 1 as const, position, unknown: false as const, type: piece.type }] : [];
+    }),
+    interaction: { selectedSite: selected, legalTargets: [...targets], pendingSite: null,
+      laneCandidates: [], selectedLane: undefined, interactionEnabled: true },
+  };
+}
 
 /** Copy allowlisted fields; never retain original objects or internal IDs. */
 export function toBattlefieldView(game: GameState, viewer: Player, interaction: BattlefieldInteraction = idle): BattlefieldViewState {

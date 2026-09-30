@@ -7,6 +7,25 @@ import type { Site } from '../src/game/types';
 test.use({ launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } });
 const canvasName = '操作可能な三次元戦場';
 const entry = process.env.BATTLEFIELD_TEST_URL ?? '/';
+const setupKey = 'military-chess:cpu-setup:v1';
+
+async function trackBoard(page: Page) {
+  await page.addInitScript(() => {
+    Object.assign(window, { normalBoardMounted: false });
+    new MutationObserver(records => {
+      if (records.some(record => [...record.addedNodes].some(node => node instanceof Element && (node.matches('.board') || node.querySelector('.board'))))) {
+        Object.assign(window, { normalBoardMounted: true });
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+}
+async function noBoardEver(page: Page) {
+  expect(await page.evaluate(() => (window as unknown as { normalBoardMounted: boolean }).normalBoardMounted)).toBe(false);
+  await expect(page.locator('.board')).toHaveCount(0);
+}
+async function setupSaved(page: Page) {
+  return page.evaluate(key => JSON.parse(localStorage.getItem(key)!), setupKey);
+}
 test('responsive resizing does not cause ResizeObserver errors', async ({ page }) => {
   await page.addInitScript(() => {
     const errors: string[] = [];
@@ -28,13 +47,15 @@ async function start(page: Page) {
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
 }
-async function point(page: Page, site: Site, height = 0.31) {
+async function point(page: Page, site: Site, height = 0.31, preset: 'full' | 'top' = 'full') {
   const canvas = page.getByRole('img', { name: canvasName });
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
   const camera = new PerspectiveCamera(42, box.width / box.height, 0.1, 100);
   const distance = Math.min(30, Math.max(13, 11 / camera.aspect));
-  camera.position.set(0, distance * .78, distance * .7); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  if (preset === 'top') camera.position.set(0, Math.min(34, Math.max(13, 10 / camera.aspect)), .001);
+  else camera.position.set(0, distance * .78, distance * .7);
+  camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
   const world = sitePoint(site), position = new Vector3(world.x, height, world.z).project(camera);
   return { x: box.x + (position.x + 1) * box.width / 2, y: box.y + (1 - position.y) * box.height / 2 };
 }
@@ -83,11 +104,40 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     page.on('request', request => requests.push(request.url()));
+    await trackBoard(page);
     await page.setViewportSize({ width, height });
     await page.goto(entry);
     await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
-    await page.getByRole('button', { name: /^かんたん/ }).click();
     expect(requests.some(url => /battlefield3d\/renderer|renderer-/.test(url))).toBe(false);
+    await page.getByRole('button', { name: /^かんたん/ }).click();
+    await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+    await expect(page.locator('.board')).toHaveCount(0);
+    await expect(page.getByRole('list', { name: '三次元表示中の駒' }).locator('li')).toHaveCount(23);
+    await expect(page.getByRole('list', { name: '三次元表示中の駒' })).not.toContainText('敵軍');
+    const originalSetup = await setupSaved(page);
+    await tap(page, 'B1', !!isMobile);
+    await expect(page.locator('.selection-panel')).toContainText('（B1）・交換可能');
+    await expect(page.getByRole('button', { name: '選択中の駒', exact: true })).toBeEnabled();
+    await tap(page, 'E1', !!isMobile);
+    await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
+    const editedSetup = await setupSaved(page);
+    expect(editedSetup.pieces).toEqual(originalSetup.pieces.map((piece: { position: Site }) => ({ ...piece, position: piece.position === 'B1' ? 'E1' : piece.position === 'E1' ? 'B1' : piece.position })));
+    expect(editedSetup.cpuSeed).toBe(originalSetup.cpuSeed);
+    expect(editedSetup.difficulty).toBe(originalSetup.difficulty);
+    const visibleSetup = await page.getByRole('list', { name: '三次元表示中の駒' }).textContent();
+    await page.getByRole('button', { name: '真上', exact: true }).click();
+    await page.evaluate(() => scrollTo(0, 0));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width >= 1400) expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 2)).toBe(true);
+    await page.screenshot({ path: info.outputPath('setup-top-' + width + '.png'), fullPage: true });
+    await page.getByRole('button', { name: '全景', exact: true }).click();
+    await page.screenshot({ path: info.outputPath('setup-full-' + width + '.png'), fullPage: true });
+    await noBoardEver(page);
+    await page.reload();
+    await page.getByRole('button', { name: /続きから/ }).click();
+    await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+    await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toHaveText(visibleSetup!);
+    expect(await setupSaved(page)).toEqual(editedSetup);
     await page.getByRole('button', { name: 'この配置で確定' }).click();
     await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
     const canvas = page.getByRole('img', { name: canvasName });
@@ -118,12 +168,14 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await page.screenshot({ path: info.outputPath('persistent-' + width + '.png'), fullPage: true });
     await move3d(page, !!isMobile);
     await expect.poll(async () => Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before + 4);
+    await noBoardEver(page);
     await page.reload();
     await page.getByRole('button', { name: /続きから/ }).click();
     await expect(canvas).toBeVisible();
     await synchronized(page);
     expect(Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before + 4);
     expect(errors).toEqual([]);
+    await noBoardEver(page);
   });
 }
 test('HQ paths require a lane and raycast path selection saves the chosen lane', async ({ page }) => {
@@ -173,15 +225,123 @@ test('unsupported WebGL leaves 2D play available', async ({ page }) => {
       return kind === 'webgl2' ? null : Reflect.apply(original, this, [kind, ...args]);
     } as typeof original;
   });
-  await start(page);
+  await fallbackSetup(page);
   await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
   await move2d(page);
 });
 test('failed lazy download leaves 2D play available', async ({ page }) => {
   await page.route('**/src/battlefield3d/renderer.ts*', route => route.abort());
-  await start(page);
+  await fallbackSetup(page);
   await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
   await move2d(page);
+});
+
+async function fallbackSetup(page: Page) {
+  await page.goto(entry);
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
+  const before = await setupSaved(page);
+  await page.getByRole('button', { name: /^B1 P1/ }).click();
+  await page.getByRole('button', { name: /^E1 P1/ }).click();
+  await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
+  expect((await setupSaved(page)).pieces).not.toEqual(before.pieces);
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+}
+
+test('3D setup presets, drag and zoom never change placement; top-down picking still swaps', async ({ page, isMobile }, info) => {
+  await trackBoard(page);
+  await page.goto(entry);
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  const canvas = page.getByRole('img', { name: canvasName });
+  await expect(canvas).toBeVisible();
+  const saved = await setupSaved(page);
+  await expect(page.getByRole('button', { name: '選択中の駒', exact: true })).toBeDisabled();
+  await tap(page, 'B1', !!isMobile);
+  await page.getByRole('button', { name: '選択中の駒', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('setup-selected.png') });
+  await page.getByRole('button', { name: '自軍正面', exact: true }).click();
+  await page.screenshot({ path: info.outputPath('setup-front.png') });
+  await page.getByRole('button', { name: '選択を解除', exact: true }).click();
+  await page.getByRole('button', { name: '全景', exact: true }).click();
+  const position = await point(page, 'B1');
+  await page.mouse.move(position.x, position.y); await page.mouse.down();
+  await page.mouse.move(position.x + 70, position.y + 25, { steps: 8 }); await page.mouse.up();
+  await expect(page.locator('.selection-panel')).toHaveCount(0);
+  await canvas.scrollIntoViewIfNeeded();
+  const beforeZoom = await canvas.screenshot();
+  const box = (await canvas.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -200);
+  await page.waitForTimeout(100);
+  expect((await canvas.screenshot()).equals(beforeZoom)).toBe(false);
+  await expect(page.locator('.selection-panel')).toHaveCount(0);
+  const cdp = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x - 30, y, id: 1 }, { x: x + 30, y, id: 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x - 50, y: y + 15, id: 1 }, { x: x + 50, y: y - 15, id: 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.locator('.selection-panel')).toHaveCount(0);
+  expect(await setupSaved(page)).toEqual(saved);
+  await page.getByRole('button', { name: '真上', exact: true }).click();
+  for (const site of ['B1', 'E1'] as const) {
+    const location = await point(page, site, .31, 'top');
+    if (isMobile) await page.touchscreen.tap(location.x, location.y); else await page.mouse.click(location.x, location.y);
+  }
+  await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
+  expect((await setupSaved(page)).pieces).not.toEqual(saved.pieces);
+  await noBoardEver(page);
+});
+
+test('3D setup all eight formations save without seed changes and forbidden flag exchange is rejected', async ({ page, isMobile }) => {
+  await trackBoard(page);
+  await page.goto(entry);
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^ふつう/ }).click();
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  const original = await setupSaved(page);
+  const select = page.getByRole('combobox', { name: '陣形を変更' });
+  const ids = await select.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value).filter(Boolean));
+  expect(ids).toHaveLength(8);
+  for (const id of ids) {
+    await select.selectOption(id);
+    await expect(page.locator('.notice')).toContainText('陣形を変更し、ブラウザへ保存');
+    const saved = await setupSaved(page);
+    expect(saved.cpuSeed).toBe(original.cpuSeed); expect(saved.difficulty).toBe('normal');
+    const expected = saved.pieces.map((piece: { position: Site }) => piece.position).sort();
+    const displayed = await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents();
+    expect(displayed.map(line => line.split(' ')[0]).sort()).toEqual(expected);
+    expect(displayed.every(line => line.includes('自軍'))).toBe(true);
+  }
+  const saved = await setupSaved(page);
+  const flag = saved.pieces.find((piece: { type: string }) => piece.type === 'flag');
+  await tap(page, flag.position, !!isMobile); await tap(page, 'B4', !!isMobile);
+  await expect(page.locator('.notice')).toContainText('地雷・軍旗は自軍の突破口入口');
+  expect(await setupSaved(page)).toEqual(saved);
+  await page.getByRole('button', { name: '選択を解除', exact: true }).click();
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await noBoardEver(page);
+});
+
+test('setup context loss switches to emergency Board and the edited match still starts', async ({ page }) => {
+  await page.goto(entry);
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  const canvas = page.getByRole('img', { name: canvasName });
+  await expect(canvas).toBeVisible();
+  await expect(page.locator('.board')).toHaveCount(0);
+  await canvas.evaluate(element => (element as HTMLCanvasElement).getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext());
+  await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
+  await page.getByRole('button', { name: /^B1 P1/ }).click();
+  await page.getByRole('button', { name: /^E1 P1/ }).click();
+  await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  await expect(page.locator('.board')).toHaveCount(0);
 });
 test('touch camera gestures do not select, canvas retains scroll, and idle rendering stops', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

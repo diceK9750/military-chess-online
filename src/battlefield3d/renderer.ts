@@ -3,13 +3,14 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SITES } from '../game/board';
 import { PIECES } from '../game/pieces';
 import { BRIDGES, sitePoint } from './state';
-import type { BattlefieldHandlers, BattlefieldViewState } from './state';
+import type { BattlefieldHandlers, BattlefieldViewState, CameraPreset } from './state';
 import type { Site } from '../game/types';
 import { TapGesture } from './gesture';
 
 export interface BattlefieldRenderer {
   update(state: BattlefieldViewState): void;
   reset(): void;
+  setCamera(preset: CameraPreset): void;
   dispose(): void;
 }
 
@@ -25,7 +26,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   const controls = new OrbitControls(camera, canvas);
   controls.enablePan = false;
   controls.enableDamping = false; // Event-driven frames, no idle animation loop.
-  controls.minPolarAngle = 0.18;
+  controls.minPolarAngle = 0;
   controls.maxPolarAngle = Math.PI / 2.6;
   controls.minDistance = 7;
   controls.maxDistance = 34;
@@ -50,6 +51,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   let resizeFrame = 0;
   let lastSize = '';
   let observer: ResizeObserver | undefined;
+  let cameraPreset: CameraPreset = 'full';
   function geometry<T extends THREE.BufferGeometry>(value: T): T { geometries.add(value); return value; }
   function material(color: string) {
     const value = new THREE.MeshLambertMaterial({ color, flatShading: true }); materials.add(value); return value;
@@ -86,11 +88,25 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       } catch { onFailure(); }
     });
   }
-  function reset() {
+  function setCamera(preset: CameraPreset) {
+    cameraPreset = preset;
     const distance = Math.min(30, Math.max(13, 11 / camera.aspect));
-    camera.position.set(0, distance * 0.78, (state.viewer === 1 ? 1 : -1) * distance * 0.7);
-    controls.target.set(0, 0, 0); controls.update(); requestDraw();
+    const side = state.viewer === 1 ? 1 : -1;
+    if (preset === 'top') {
+      controls.target.set(0, 0, 0);
+      camera.position.set(0, Math.min(34, Math.max(13, 10 / camera.aspect)), side * .001);
+    } else if (preset === 'front' || preset === 'selected') {
+      const point = preset === 'selected' && state.interaction.selectedSite ? sitePoint(state.interaction.selectedSite) : { x: 0, z: side * 2 };
+      const near = Math.min(24, Math.max(7, 7 / camera.aspect));
+      controls.target.set(point.x, .3, point.z);
+      camera.position.set(point.x, near * .78, point.z + side * near * .7);
+    } else {
+      controls.target.set(0, 0, 0);
+      camera.position.set(0, distance * .78, side * distance * .7);
+    }
+    controls.update(); requestDraw();
   }
+  function reset() { setCamera('full'); }
   function resize() {
     if (disposed) return;
     const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight);
@@ -99,7 +115,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
     if (size === lastSize) return;
     lastSize = size;
     renderer.setPixelRatio(ratio);
-    renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); reset();
+    renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); setCamera(cameraPreset);
   }
   function lost(event: Event) { event.preventDefault(); onFailure(); }
   function down(event: PointerEvent) { if (event.button === 0) gesture.down(event.pointerId, event.clientX, event.clientY); }
@@ -249,6 +265,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
         animateFrame(start);
       }
       animationStatus(!!animateFrame);
+      if (cameraPreset === 'selected' || next.viewer !== previous.viewer) setCamera(cameraPreset);
       const interaction = state.interaction;
       for (const site of new Set([...interaction.legalTargets, ...(interaction.selectedSite ? [interaction.selectedSite] : []), ...(interaction.pendingSite ? [interaction.pendingSite] : [])])) {
         const { x, z } = sitePoint(site);
@@ -285,6 +302,6 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       if (!disposed && !resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
     }); observer.observe(host);
     update(initial); resize();
-    return { update, reset, dispose };
+    return { update, reset, setCamera, dispose };
   } catch (error) { dispose(); throw error; }
 }

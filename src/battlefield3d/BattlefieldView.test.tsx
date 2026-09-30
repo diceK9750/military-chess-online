@@ -7,6 +7,9 @@ import { toBattlefieldView } from './state';
 import type { BattlefieldHandlers, BattlefieldViewState } from './state';
 import { scenario } from '../dev/fixtures';
 import { LocalGame } from '../ui/LocalGame';
+import { CpuSetup } from '../ui/CpuSetup';
+import { useState } from 'react';
+import type { GameState } from '../game/types';
 
 const mock = vi.hoisted(() => ({ create: vi.fn(), reset: vi.fn(), dispose: vi.fn(), update: vi.fn() }));
 vi.mock('./renderer', () => ({ createBattlefield: mock.create }));
@@ -138,28 +141,46 @@ test('animation feedback disables all move paths without restarting the scene; c
   expect(changed).toHaveBeenCalledTimes(1);
 });
 
-test('complete CPU game from valid initial placement to terminal through 3D callbacks alone', async () => {
+test('complete CPU game from 3D setup to terminal through 3D callbacks alone, with no Board ever mounted', async () => {
   vi.useFakeTimers();
   try {
-    const { startGame } = await import('../game/game');
     const { defaultPlacement } = await import('../dev/fixtures');
     const { legalMoves } = await import('../game/movement');
-    const p1 = defaultPlacement(1), p2 = defaultPlacement(2);
-    let game = startGame(p1, p2, 1);
-    render(<LocalGame initial={game} mode="cpu" cpuSeed={12} initialPlacements={{ p1, p2 }} onChange={next => { game = next; }} />);
+    const p1 = defaultPlacement(1);
+    let game: GameState | null = null;
+    function Journey() {
+      const [started, setStarted] = useState<GameState | null>(null);
+      return started
+        ? <LocalGame initial={started} mode="cpu" cpuSeed={12} initialPlacements={{ p1, p2: started.pieces.filter(piece => piece.owner === 2) }} onChange={next => { game = next; }} />
+        : <CpuSetup seed={12} difficulty="easy" initialPieces={p1} store={{ load: () => null, save: () => true }} onStart={next => { game = next; setStarted(next); }} />;
+    }
+    let boardMounted = false;
+    const observer = new MutationObserver(records => {
+      if (records.some(record => [...record.addedNodes].some(node => node instanceof Element && (node.matches('.board') || node.querySelector('.board'))))) boardMounted = true;
+    });
+    observer.observe(document, { childList: true, subtree: true });
+    render(<Journey />);
     await act(async () => {});
-    for (let turns = 0; turns < 1200 && !game.result; turns++) {
-      if (game.turn === 1) {
-        const move = legalMoves(game.pieces, 1)[0];
+    expect(latest().phase).toBe('setup');
+    expect(latest().pieces).toHaveLength(23);
+    fireEvent.click(screen.getByRole('button', { name: 'この配置で確定' }));
+    await act(async () => {});
+    const current = () => game!;
+    for (let turns = 0; turns < 1200 && !current().result; turns++) {
+      if (current().turn === 1) {
+        const move = legalMoves(current().pieces, 1)[0];
         act(() => input().onSiteSelect(move.from));
         act(() => input().onSiteSelect(move.to));
         if (move.lane) act(() => input().onLaneSelect(move.lane!));
         act(() => input().onSiteSelect(move.to));
       }
       await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+      expect(document.querySelector('.board')).toBeNull();
     }
-    expect(game.result).not.toBeNull();
-    expect(game.moveCount).toBeGreaterThan(1);
+    observer.disconnect();
+    expect(boardMounted).toBe(false);
+    expect(current().result).not.toBeNull();
+    expect(current().moveCount).toBeGreaterThan(1);
     expect(screen.getByRole('heading', { name: '対局終了' })).toBeInTheDocument();
     expect(document.querySelector('.board')).toBeNull();
     expect(latest().pieces.every(piece => !piece.unknown)).toBe(true);
