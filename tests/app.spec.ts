@@ -2,6 +2,16 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
+// Retain the complete legacy journeys as explicit non-WebGL fallback coverage.
+// Normal three-dimensional journeys live in battlefield.spec.ts.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...args: unknown[]) {
+      return kind === 'webgl2' ? null : Reflect.apply(original, this, [kind, ...args]);
+    } as typeof original;
+  });
+});
 test('wide play screen centers the board and keeps the shared rule panels beside it', async ({ page }) => {
   await page.setViewportSize({ width: 2048, height: 1000 });
   await page.goto('/');
@@ -42,6 +52,7 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
   await page.getByRole('button', { name: /^かんたん/ }).click();
 
   async function inspect(state: 'setup' | 'play') {
+    await expect(page.locator('.board')).toBeVisible();
     for (const [width, height] of sizes) {
       await page.setViewportSize({ width, height });
       await page.evaluate(() => scrollTo(0, 0));
@@ -114,6 +125,7 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
 
   await page.setViewportSize({ width: 2048, height: 1000 });
   const own = page.locator('.board .cell.side-1');
+  await expect(own.first()).toBeVisible();
   let found = false;
   for (let index = 0; index < await own.count(); index++) {
     await own.nth(index).click();
@@ -213,6 +225,7 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
   const opponent = page.locator('.cell.side-2');
+  await expect(opponent.first()).toBeVisible();
   const opponentCount = await opponent.count();
   expect(opponentCount).toBeGreaterThanOrEqual(22); // CPU may have moved and fought when chosen to play first.
   expect(opponentCount).toBeLessThanOrEqual(23);
@@ -220,6 +233,7 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   expect(await opponent.locator('.piece-face').count()).toBe(0);
   expect(await page.locator('.cell.side-1 .piece-face').count()).toBeGreaterThan(0);
   const own = page.locator('.cell.side-1');
+  await expect(own.first()).toBeVisible();
   let selected = false;
   for (let i = 0; i < await own.count(); i++) {
     await own.nth(i).click();
@@ -250,6 +264,7 @@ test('CPU formation can be edited and a second destination click confirms on mob
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!).game.moveCount as number);
   const own = page.locator('.board .cell.side-1');
+  await expect(own.first()).toBeVisible();
   let found = false;
   for (let i = 0; i < await own.count(); i++) {
     await own.nth(i).click();
@@ -281,6 +296,7 @@ test('CPU match auto-saves and resumes after reload and later moves', async ({ p
   await page.getByRole('button', { name: '続きから' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
   const own = page.locator('.cell.side-1');
+  await expect(own.first()).toBeVisible();
   for (let i = 0; i < await own.count(); i++) {
     await own.nth(i).click();
     if (await page.locator('.cell.legal').count() > 0) break;
@@ -315,6 +331,7 @@ test('a v0.1 browser match resumes under v0.2 after replay validation', async ({
   await page.getByRole('button', { name: '続きから' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
   const own = page.locator('.board .cell.side-1');
+  await expect(own.first()).toBeVisible();
   for (let i = 0; i < await own.count(); i++) {
     await own.nth(i).click();
     if (await page.locator('.board .cell.legal:not(.hq)').count()) break;
@@ -455,6 +472,7 @@ test('mobile-first journey, keyboard controls, and six responsive widths', async
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
   const movesBefore = await page.locator('.badge').first().textContent();
   const own = page.locator('.board .cell.side-1');
+  await expect(own.first()).toBeVisible();
   for (let index = 0; index < await own.count(); index++) {
     await own.nth(index).click();
     if (await page.locator('.board .cell.legal').count()) break;

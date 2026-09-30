@@ -3,23 +3,24 @@ import { PIECES } from '../game/pieces';
 import type { BattlefieldHandlers, BattlefieldViewState } from './state';
 import type { BattlefieldRenderer } from './renderer';
 
-export function BattlefieldView({ state, onSiteSelect, onLaneSelect }: { state: BattlefieldViewState } & BattlefieldHandlers) {
+export function BattlefieldView({ state, onSiteSelect, onLaneSelect, onAnimationChange, onUnavailable }: { state: BattlefieldViewState; onUnavailable?(): void } & BattlefieldHandlers) {
   const host = useRef<HTMLDivElement>(null);
   const renderer = useRef<BattlefieldRenderer | null>(null);
-  const current = useRef({ state, onSiteSelect, onLaneSelect });
+  const current = useRef({ state, onSiteSelect, onLaneSelect, onAnimationChange, onUnavailable });
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  current.current = { state, onSiteSelect, onLaneSelect };
+  current.current = { state, onSiteSelect, onLaneSelect, onAnimationChange, onUnavailable };
   useEffect(() => {
     let cancelled = false;
     const fail = () => {
       renderer.current?.dispose(); renderer.current = null;
-      if (!cancelled) setStatus('error');
+      if (!cancelled) { setStatus('error'); current.current.onAnimationChange?.(false); current.current.onUnavailable?.(); }
     };
     void import('./renderer').then(({ createBattlefield }) => {
       if (cancelled) return;
       renderer.current = createBattlefield(host.current!, current.current.state, fail, {
         onSiteSelect: site => current.current.onSiteSelect(site),
         onLaneSelect: lane => current.current.onLaneSelect(lane),
+        onAnimationChange: active => current.current.onAnimationChange?.(active),
       });
       setStatus('ready');
     }).catch(fail);
@@ -27,7 +28,7 @@ export function BattlefieldView({ state, onSiteSelect, onLaneSelect }: { state: 
   }, []);
   useEffect(() => {
     try { renderer.current?.update(state); }
-    catch { renderer.current?.dispose(); renderer.current = null; setStatus('error'); }
+    catch { renderer.current?.dispose(); renderer.current = null; setStatus('error'); current.current.onAnimationChange?.(false); current.current.onUnavailable?.(); }
   }, [state]);
   const interaction = state.interaction;
   return <section className={'battlefield-panel battlefield-' + status} aria-label="三次元戦場">

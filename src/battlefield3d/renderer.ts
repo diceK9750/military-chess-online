@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SITES } from '../game/board';
 import { PIECES } from '../game/pieces';
-import { PIECE_ICONS } from '../ui/PieceFace';
 import { BRIDGES, sitePoint } from './state';
 import type { BattlefieldHandlers, BattlefieldViewState } from './state';
 import type { Site } from '../game/types';
@@ -34,6 +33,9 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
+  const billboards: THREE.Object3D[] = [];
+  let busy = false;
+  function animationStatus(active: boolean) { if (busy !== active) { busy = active; handlers.onAnimationChange?.(active); } }
   const labelCache = new Map<string, THREE.MeshBasicMaterial>();
   const units = new THREE.Group();
   const overlays = new THREE.Group();
@@ -55,18 +57,18 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
   function mesh(shape: THREE.BufferGeometry, surface: THREE.Material, x: number, y: number, z: number, group: THREE.Object3D = scene) {
     const object = new THREE.Mesh(shape, surface); object.position.set(x, y, z); group.add(object); return object;
   }
-  function label(text: string, ink: string, background: string) {
-    const key = `${text}/${ink}/${background}`;
+  function label(text: string, ink: string, background: string, wide = false) {
+    const key = `${text}/${ink}/${background}/${wide}`;
     const cached = labelCache.get(key); if (cached) return cached;
-    const bitmap = document.createElement('canvas'); bitmap.width = 256; bitmap.height = 256;
+    const bitmap = document.createElement('canvas'); bitmap.width = 256; bitmap.height = wide ? 96 : 256;
     const ctx = bitmap.getContext('2d'); if (!ctx) throw new Error('Canvas2D unavailable');
-    ctx.fillStyle = background; ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = ink; ctx.lineWidth = 4; ctx.strokeRect(12, 12, 232, 232);
+    ctx.fillStyle = background; ctx.fillRect(0, 0, 256, bitmap.height);
+    ctx.strokeStyle = ink; ctx.lineWidth = 4; ctx.strokeRect(4, 4, 248, bitmap.height - 8);
     ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const lines = text.split('\n');
     lines.forEach((line, index) => {
-      ctx.font = `${lines.length === 1 ? 68 : index === 0 ? 78 : 50}px "Yu Gothic", "Meiryo", sans-serif`;
-      ctx.fillText(line, 128, lines.length === 1 ? 132 : index === 0 ? 85 : 182, 225);
+      ctx.font = `700 ${lines.length === 1 ? (wide ? 72 : 68) : index === 0 ? 78 : 50}px "Yu Gothic", "Meiryo", sans-serif`;
+      ctx.fillText(line, 128, wide ? 50 : lines.length === 1 ? 132 : index === 0 ? 85 : 182, 225);
     });
     const texture = new THREE.CanvasTexture(bitmap); texture.colorSpace = THREE.SRGBColorSpace; textures.add(texture);
     const surface = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }); materials.add(surface); labelCache.set(key, surface); return surface;
@@ -78,8 +80,9 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       if (disposed) return;
       try {
         const active = animateFrame?.(now) ?? false;
+        billboards.forEach(label => label.quaternion.copy(camera.quaternion));
         renderer.render(scene, camera);
-        if (active) requestDraw(); else animateFrame = undefined;
+        if (active) requestDraw(); else { animateFrame = undefined; animationStatus(false); }
       } catch { onFailure(); }
     });
   }
@@ -146,7 +149,14 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       mesh(bridge, wood, x, 0.12, 0);
       for (const offset of [-0.31, 0.31]) mesh(rail, wood, x + offset, 0.2, 0);
     }
-    const face = geometry(new THREE.PlaneGeometry(0.65, 0.74));
+    const face = geometry(new THREE.PlaneGeometry(0.8, 0.29));
+    const body = geometry(new THREE.CylinderGeometry(.13, .19, .27, 6));
+    const headShape = geometry(new THREE.IcosahedronGeometry(.13, 0));
+    const helmet = geometry(new THREE.CylinderGeometry(.17, .18, .1, 6));
+    const limb = geometry(new THREE.BoxGeometry(.09, .19, .1));
+    const insignia = geometry(new THREE.BoxGeometry(.09, .055, .045));
+    const equipment = geometry(new THREE.BoxGeometry(.34, .08, .12));
+    const skin = material('#d9c8a7'), dark = material('#273a40'), brass = material('#d8b85e');
     const badge = geometry(new THREE.CylinderGeometry(0.39, 0.45, 0.17, 5));
     const pole = geometry(new THREE.CylinderGeometry(0.025, 0.025, 0.85, 5));
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
@@ -185,16 +195,41 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       const transition = next.moveCount === previous.moveCount + 1 && next.lastMove ? next.lastMove : null;
       const movingPiece = transition ? previous.pieces.find(piece => piece.position === transition.from) : undefined;
       animateFrame = undefined;
-      state = next; units.clear(); overlays.clear();
+      state = next; units.clear(); overlays.clear(); billboards.length = 0;
       const moving = new THREE.Group();
       for (const piece of state.pieces) {
         const { x, z } = sitePoint(piece.position), own = piece.owner === state.viewer;
         const group = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
         const base = mesh(badge, own ? blue : red, x, 0.16, z, group); base.userData = { site: piece.position };
-        const text = piece.unknown ? '?' : `${PIECE_ICONS[piece.type]}\n${PIECES[piece.type].label}`;
-        const plaque = mesh(face, label(text, own ? '#223f52' : '#f1e5d4', own ? '#eee1bb' : '#86534b'), x, 0.31, z, group);
-        plaque.userData = { site: piece.position };
-        plaque.rotation.set(-Math.PI / 2 + (state.viewer === 1 ? 0.2 : -0.2), 0, state.viewer === 1 ? 0 : Math.PI);
+        const uniform = own ? blue : red;
+        const part = (shape: THREE.BufferGeometry, surface: THREE.Material, dx: number, y: number, dz = 0) => {
+          const object = mesh(shape, surface, x + dx, y, z + dz, group);
+          object.userData = { site: piece.position }; return object;
+        };
+        part(body, uniform, 0, .4);
+        part(headShape, skin, 0, .63);
+        part(helmet, uniform, 0, .74);
+        for (const side of [-1, 1]) {
+          part(limb, dark, side * .09, .23);
+          const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
+        }
+        // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
+        if (!piece.unknown) {
+          if (['general','lieutenantGeneral','majorGeneral','colonel','lieutenantColonel','major'].includes(piece.type)) {
+            part(insignia, brass, 0, .8);
+          } else if (piece.type === 'aircraft') {
+            part(equipment, brass, 0, .47, -.16).scale.x = 1.6;
+          } else if (piece.type === 'engineer' || piece.type === 'tank') {
+            part(equipment, dark, 0, .46, -.18).rotation.x = Math.PI / 2;
+          } else if (piece.type === 'flag') {
+            part(pole, wood, .24, .52); part(equipment, uniform, .36, .86);
+          } else if (piece.type === 'mine') {
+            part(insignia, brass, 0, .54, .12);
+          }
+        }
+        const text = piece.unknown ? '?' : PIECES[piece.type].label;
+        const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#f2e8ca' : '#743e36', true), x, 1.01, z, group);
+        plaque.userData = { site: piece.position }; billboards.push(plaque);
       }
       units.add(moving);
       if (transition && movingPiece && !reducedMotion.matches) {
@@ -213,6 +248,7 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
         };
         animateFrame(start);
       }
+      animationStatus(!!animateFrame);
       const interaction = state.interaction;
       for (const site of new Set([...interaction.legalTargets, ...(interaction.selectedSite ? [interaction.selectedSite] : []), ...(interaction.pendingSite ? [interaction.pendingSite] : [])])) {
         const { x, z } = sitePoint(site);
@@ -222,6 +258,13 @@ export function createBattlefield(host: HTMLElement, initial: BattlefieldViewSta
       for (const lane of interaction.laneCandidates) {
         const path = mesh(pathShape, lane === interaction.selectedLane ? pendingMaterial : gold, lane === 'C' ? -0.5 : 0.5, 0.72, 0, overlays);
         path.userData = { lane };
+      }
+      if (state.battleSite) {
+        const point = sitePoint(state.battleSite);
+        const mark = mesh(wideRing, pendingMaterial, point.x, .16, point.z, overlays);
+        mark.rotation.x = -Math.PI / 2;
+        const sign = mesh(face, label('戦', '#fff3df', '#87392b', true), point.x + .3, .4, point.z, overlays);
+        billboards.push(sign);
       }
       if (state.lastMove) {
         const from = sitePoint(state.lastMove.from), to = sitePoint(state.lastMove.to);

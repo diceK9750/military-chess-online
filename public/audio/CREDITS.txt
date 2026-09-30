@@ -1,0 +1,19 @@
+# Bundled music
+
+"Shenyang" — Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0 License.
+https://creativecommons.org/licenses/by/4.0/
+
+Source / author track page:
+https://incompetech.com/music/royalty-free/index.html?Search=Search&isrc=USUAN1600066
+Original MP3:
+https://incompetech.com/music/royalty-free/mp3-royaltyfree/Shenyang.mp3
+
+Downloaded 2026-09-30. File renamed to shenyang.mp3; audio unmodified.
+Playback is looped by the application. No endorsement is implied.
+Redistribution (including commercial use) and adaptations are permitted under
+CC BY 4.0 with attribution, a license link, and indication of changes.
+Credit appears in README.md and the in-app How to Play screen.
+
+SHA-256: 1CF2E0F57F820D82E9066BA4DCA076735AEDD512BC1909FDAA2E0065BD866786
+Size: 4,848,882 bytes. The application fetches this file only after BGM is enabled.

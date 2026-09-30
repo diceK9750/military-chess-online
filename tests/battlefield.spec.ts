@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { sitePoint } from '../src/battlefield3d/state';
@@ -52,11 +53,29 @@ async function move2d(page: Page) {
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
 }
 async function synchronized(page: Page) {
-  const pieces = await page.locator('.cell.side-1, .cell.side-2').evaluateAll(cells => cells.map(cell => {
-    const own = cell.classList.contains('side-1');
-    return cell.getAttribute('data-site') + ' ' + (own ? '自軍' : '敵軍') + ' ' + (own ? cell.querySelector('.piece-name')!.textContent : '不明');
-  }).sort());
-  expect((await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents()).sort()).toEqual(pieces);
+  const pieces = await page.evaluate(() => {
+    const match = JSON.parse(localStorage.getItem('military-chess:cpu-match:v1')!);
+    return match.game.pieces.filter((p: {position: string | null}) => p.position).map((p: {position: string; owner: number}) => p.position + ' ' + (p.owner === 1 ? '自軍' : '敵軍')).sort();
+  });
+  const visible = await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents();
+  expect(visible.map(text => text.split(' ').slice(0,2).join(' ')).sort()).toEqual(pieces);
+  expect(visible.filter(text => text.includes('敵軍')).every(text => text.endsWith('不明'))).toBe(true);
+  await expect(page.locator('.board')).toHaveCount(0);
+}
+async function choose3d(page: Page, touch = false): Promise<Site> {
+  const pieces = await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents();
+  for (const line of pieces.filter(text => text.includes('自軍'))) {
+    await tap(page, line.split(' ')[0] as Site, touch);
+    if (await page.locator('[data-target]').count()) return await page.locator('[data-target]').first().getAttribute('data-target') as Site;
+  }
+  throw new Error('No legal target found using 3D picking');
+}
+async function move3d(page: Page, touch: boolean) {
+  const target = await choose3d(page, touch);
+  await tap(page, target, touch);
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  await page.waitForTimeout(350);
 }
 for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [390,844]]) {
   test('persistent interactive battlefield ' + width + 'x' + height, async ({ page, isMobile }, info) => {
@@ -77,15 +96,8 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await page.waitForTimeout(350); // Wait for the bounded initial CPU transition.
     await synchronized(page);
     const before = Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''));
-    const ownSites = await page.locator('.cell.side-1').evaluateAll(cells => cells.map(cell => cell.getAttribute('data-site')!));
-    for (const site of ownSites) {
-      await tap(page, site as Site, !!isMobile);
-      if (await page.locator('.cell.legal').count()) break;
-    }
-    const source = await page.locator('.cell.selected').getAttribute('data-site');
-    expect(source).toBeTruthy();
-    await expect(page.locator('.battlefield-selection')).toContainText(source!);
-    const target = await page.locator('.cell.legal').first().getAttribute('data-site') as Site;
+    const target = await choose3d(page, !!isMobile);
+    await expect(page.locator('.battlefield-selection')).toContainText('を選択中');
     await tap(page, target, !!isMobile);
     await expect(page.locator('.battlefield-selection')).toContainText(target + 'へ移動予定');
     expect(Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before);
@@ -94,18 +106,17 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
     await page.waitForTimeout(350);
     await synchronized(page);
-    await page.locator('.cell.side-1').first().click();
-    const selected = await page.locator('.cell.selected').getAttribute('data-site');
-    await expect(page.locator('.battlefield-selection')).toContainText(selected!);
+    await choose3d(page, !!isMobile);
+    await page.getByRole('button', { name: '選択を解除' }).click();
     await page.evaluate(() => scrollTo(0, 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width >= 1400) {
       expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 2)).toBe(true);
-      expect((await page.locator('.board').boundingBox())!.width).toBeGreaterThanOrEqual(460);
+      expect((await canvas.boundingBox())!.width).toBeGreaterThanOrEqual(520);
       await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
     }
     await page.screenshot({ path: info.outputPath('persistent-' + width + '.png'), fullPage: true });
-    await move2d(page);
+    await move3d(page, !!isMobile);
     await expect.poll(async () => Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before + 4);
     await page.reload();
     await page.getByRole('button', { name: /続きから/ }).click();
@@ -131,7 +142,7 @@ test('HQ paths require a lane and raycast path selection saves the chosen lane',
   await expect(page.getByRole('radio', { name: 'D列を通る' })).toBeChecked();
   await tap(page, 'HQ-P2', false);
   await expect(page.locator('.latest-event')).toContainText('（D列）');
-  await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
+  await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toContainText('HQ-P2 自軍 飛行機');
 });
 test('camera drag cannot select or commit; reset and repeated mounts release WebGL', async ({ page }) => {
   await start(page);
@@ -142,7 +153,7 @@ test('camera drag cannot select or commit; reset and repeated mounts release Web
   const position = await point(page, 'B4');
   await page.mouse.move(position.x, position.y); await page.mouse.down();
   await page.mouse.move(position.x + 80, position.y + 30, { steps: 8 }); await page.mouse.up();
-  expect(await page.locator('.cell.selected').count()).toBe(0);
+  await expect(page.locator('.battlefield-selection')).toHaveText('青＝自軍 / 赤＝敵軍');
   expect(await page.locator('.badge').first().textContent()).toBe(count);
   await page.getByRole('button', { name: '視点を戻す' }).click();
   for (let i = 0; i < 3; i++) {
@@ -202,4 +213,68 @@ test('touch camera gestures do not select, canvas retains scroll, and idle rende
   const scrollBeforeWheel = await page.evaluate(() => scrollY);
   await page.mouse.move(5, 600); await page.mouse.wheel(0, 250);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(scrollBeforeWheel);
+});
+
+test('3D high flight crosses the enemy and terminal position reveals labels', async ({ page, isMobile }) => {
+  await page.goto(entry);
+  await page.getByText('開発用・将来の機能').click();
+  await page.getByRole('button', { name: /開発用ローカル対局を開く/ }).click();
+  await page.getByText('検証用の盤面を開く', { exact: true }).click();
+  await page.getByRole('button', { name: '飛行機の高飛び' }).click();
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  await tap(page, 'D5', !!isMobile); await tap(page, 'HQ-P2', !!isMobile);
+  await page.getByRole('button', { name: '確定して実行' }).click();
+  await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toContainText('HQ-P2 自軍 飛行機');
+  await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toContainText('D7 敵軍 不明');
+  await page.getByRole('button', { name: '司令部占領', exact: true }).click();
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  await tap(page, 'C7', !!isMobile); await tap(page, 'HQ-P2', !!isMobile); await tap(page, 'HQ-P2', !!isMobile);
+  await expect(page.getByRole('heading', { name: '対局終了' })).toBeVisible();
+  await expect(page.locator('.result')).toContainText('敵司令部を占領');
+  await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toContainText('A7 敵軍 大佐');
+  await expect(page.locator('.board')).toHaveCount(0);
+  await page.getByText('対局履歴（', { exact: false }).click();
+  await expect(page.locator('.history')).toContainText('終局');
+});
+
+test('BGM is lazy, plays only on gesture, stops, and restores volume without autoplay', async ({ page }) => {
+  const musicRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('shenyang.mp3')) musicRequests.push(request.url()); });
+  await page.goto(entry);
+  expect(musicRequests).toHaveLength(0);
+  await expect(page.locator('audio')).not.toHaveAttribute('src');
+  await page.getByRole('slider', { name: 'BGM音量' }).fill('40');
+  await page.getByRole('button', { name: 'BGM ONにする' }).click();
+  await expect(page.getByRole('button', { name: 'BGM OFFにする' })).toBeVisible();
+  await expect.poll(() => page.locator('audio').evaluate((e: HTMLAudioElement) => e.currentTime)).toBeGreaterThan(0);
+  expect(await page.locator('audio').evaluate((e: HTMLAudioElement) => e.volume)).toBe(.4);
+  expect(musicRequests.length).toBeGreaterThan(0);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'BGM 再生' })).toBeVisible();
+  expect(await page.locator('audio').evaluate((e: HTMLAudioElement) => e.paused)).toBe(true);
+  await expect(page.getByRole('slider')).toHaveValue('40');
+  await page.getByRole('button', { name: 'BGM 再生' }).click();
+  await page.getByRole('button', { name: 'BGM OFFにする' }).click();
+  expect(await page.locator('audio').evaluate((e: HTMLAudioElement) => e.paused)).toBe(true);
+});
+
+test('3D CPU match encrypted export and import restores the same position', async ({ page, isMobile }) => {
+  await start(page); await page.waitForTimeout(350); await move3d(page, !!isMobile);
+  const before = await page.getByRole('list', { name: '三次元表示中の駒' }).textContent();
+  await page.getByRole('button', { name: '対局を保存', exact: true }).click();
+  await page.getByLabel('パスワード', { exact: true }).fill('Test-only-roundtrip-12');
+  await page.getByLabel('パスワード（確認）').fill('Test-only-roundtrip-12');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'ファイルを保存', exact: true }).click();
+  const file = await download;
+  const backup = { name: file.suggestedFilename(), mimeType: "application/json", buffer: await readFile((await file.path())!) };
+  await page.goto(entry);
+  await page.getByRole('button', { name: '保存した対局を読み込む' }).click();
+  await page.getByLabel('対局ファイル').setInputFiles(backup);
+  await page.getByLabel('パスワード', { exact: true }).fill('Test-only-roundtrip-12');
+  await page.getByRole('button', { name: '対局を読み込む', exact: true }).click();
+  await page.getByRole('button', { name: '読み込んだ対局へ置き換える' }).click();
+  await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
+  await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toHaveText(before!);
+  await expect(page.locator('.board')).toHaveCount(0);
 });

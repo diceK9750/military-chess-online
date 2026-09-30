@@ -58,26 +58,27 @@ test('departing before lazy loading resolves never creates a renderer', async ()
   await act(async () => {});
   expect(mock.create).not.toHaveBeenCalled();
 });
-test('3D selection and pending synchronize with 2D, and retap commits only once', async () => {
+test('3D selection and pending synchronize with assist UI, and retap commits only once', async () => {
   const changed = vi.fn();
   render(<LocalGame initial={scenario('highFlight')} onChange={changed} />);
   await waitFor(() => expect(mock.create).toHaveBeenCalled());
   act(() => input().onSiteSelect('D5'));
   expect(latest().interaction.selectedSite).toBe('D5');
   expect(latest().interaction.legalTargets).toContain('HQ-P2');
-  expect(screen.getByRole('button', { name: 'D5 P1 飛行機' })).toHaveClass('selected');
+  expect(screen.getByText(/飛行機（D5）を選択中/)).toBeInTheDocument();
+  expect(document.querySelector('.board')).toBeNull();
   act(() => input().onSiteSelect('HQ-P2'));
   expect(latest().interaction.pendingSite).toBe('HQ-P2');
   expect(changed).not.toHaveBeenCalled();
   act(() => { input().onSiteSelect('HQ-P2'); input().onSiteSelect('HQ-P2'); });
   expect(changed).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: '三次元表示中の駒' })).toHaveTextContent('HQ-P2 自軍 飛行機');
 });
-test('2D selection and 3D destination use the same confirm button', async () => {
+test('3D selection and destination use the same confirm button', async () => {
   const changed = vi.fn();
   render(<LocalGame initial={scenario('highFlight')} onChange={changed} />);
   await waitFor(() => expect(mock.create).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole('button', { name: 'D5 P1 飛行機' }));
+  act(() => input().onSiteSelect('D5'));
   expect(latest().interaction.selectedSite).toBe('D5');
   act(() => input().onSiteSelect('HQ-P2'));
   fireEvent.click(screen.getByRole('button', { name: '確定して実行' }));
@@ -88,7 +89,7 @@ test('HQ lane selection is shared, required, and recorded in MOVE', async () => 
   render(<LocalGame initial={scenario('aircraft')} onChange={changed} />);
   await waitFor(() => expect(mock.create).toHaveBeenCalled());
   act(() => input().onSiteSelect('HQ-P1'));
-  fireEvent.click(screen.getByRole('button', { name: 'HQ-P2 P2 工兵' }));
+  act(() => input().onSiteSelect('HQ-P2'));
   expect(latest().interaction.laneCandidates).toEqual(['C', 'D']);
   act(() => input().onSiteSelect('HQ-P2'));
   expect(changed).not.toHaveBeenCalled();
@@ -116,4 +117,53 @@ test('illegal enemy selection, CPU turn and finished game cannot execute', async
   expect(latest().interaction.interactionEnabled).toBe(false);
   act(() => input().onSiteSelect('D5'));
   expect(changed).not.toHaveBeenCalled();
+});
+
+test('animation feedback disables all move paths without restarting the scene; context loss enables fallback', async () => {
+  const changed = vi.fn();
+  render(<LocalGame initial={scenario('highFlight')} onChange={changed} />);
+  await waitFor(() => expect(mock.create).toHaveBeenCalled());
+  act(() => input().onSiteSelect('D5'));
+  act(() => input().onSiteSelect('HQ-P2'));
+  const updates = mock.update.mock.calls.length;
+  act(() => input().onAnimationChange?.(true));
+  expect(mock.update).toHaveBeenCalledTimes(updates);
+  expect(screen.getByRole('button', { name: '確定して実行' })).toBeDisabled();
+  act(() => input().onSiteSelect('HQ-P2'));
+  expect(changed).not.toHaveBeenCalled();
+  act(() => mock.create.mock.calls[0][2]());
+  expect(screen.getByRole('button', { name: '確定して実行' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'D5 P1 飛行機' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '確定して実行' }));
+  expect(changed).toHaveBeenCalledTimes(1);
+});
+
+test('complete CPU game from valid initial placement to terminal through 3D callbacks alone', async () => {
+  vi.useFakeTimers();
+  try {
+    const { startGame } = await import('../game/game');
+    const { defaultPlacement } = await import('../dev/fixtures');
+    const { legalMoves } = await import('../game/movement');
+    const p1 = defaultPlacement(1), p2 = defaultPlacement(2);
+    let game = startGame(p1, p2, 1);
+    render(<LocalGame initial={game} mode="cpu" cpuSeed={12} initialPlacements={{ p1, p2 }} onChange={next => { game = next; }} />);
+    await act(async () => {});
+    for (let turns = 0; turns < 1200 && !game.result; turns++) {
+      if (game.turn === 1) {
+        const move = legalMoves(game.pieces, 1)[0];
+        act(() => input().onSiteSelect(move.from));
+        act(() => input().onSiteSelect(move.to));
+        if (move.lane) act(() => input().onLaneSelect(move.lane!));
+        act(() => input().onSiteSelect(move.to));
+      }
+      await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+    }
+    expect(game.result).not.toBeNull();
+    expect(game.moveCount).toBeGreaterThan(1);
+    expect(screen.getByRole('heading', { name: '対局終了' })).toBeInTheDocument();
+    expect(document.querySelector('.board')).toBeNull();
+    expect(latest().pieces.every(piece => !piece.unknown)).toBe(true);
+    fireEvent.click(screen.getByText('終局後の全駒・初期配置・戦闘を確認'));
+    expect(screen.getByText('コンピューターの初期配置')).toBeInTheDocument();
+  } finally { vi.useRealTimers(); }
 });

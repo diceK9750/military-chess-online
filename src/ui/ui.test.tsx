@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
@@ -15,9 +15,10 @@ import { applyMove, startGame } from '../game/game';
 import { createSavedMatch, MATCH_STORAGE_KEY, SETUP_STORAGE_KEY, storeSavedMatch } from '../save/match';
 import { ExportPanel, ImportPanel } from './SaveFilePanels';
 
-// WebGL itself is covered in browser tests; keep these existing 2D regression tests in jsdom.
-vi.mock('../battlefield3d/renderer', () => ({ createBattlefield: () => ({ update() {}, reset() {}, dispose() {} }) }));
+// Existing full game journeys also cover the supported WebGL-unavailable fallback.
+vi.mock('../battlefield3d/renderer', () => ({ createBattlefield: () => { throw new Error("WebGL unavailable in this fallback suite"); } }));
 
+beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {}); });
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 test('title offers disabled resume, import, and instructions when no match is saved', async () => {
   render(<App />);
@@ -39,7 +40,7 @@ test('saved match can resume and new match asks before replacement', async () =>
   await user.click(screen.getByRole('button', { name: 'キャンセル' }));
   expect(localStorage.getItem(MATCH_STORAGE_KEY)).not.toBeNull();
 });
-test('corrupt autosave shows error but leaves new game available', () => {
+test('corrupt autosave shows error but leaves new game available', async () => {
   localStorage.setItem(MATCH_STORAGE_KEY, '{broken');
   render(<App />);
   expect(screen.getByRole('alert')).toHaveTextContent('復元できません');
@@ -73,6 +74,7 @@ test('home links to formal rules and clearly marks online placeholders', async (
 });
 test('move requires lane selection and explicit confirmation', async () => {
   render(<LocalGame initial={scenario('aircraft')} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 P2 工兵' }));
   expect(screen.getByRole('button', { name: '確定して実行' })).toBeDisabled();
@@ -86,6 +88,7 @@ test('move requires lane selection and explicit confirmation', async () => {
 });
 test('D5 aircraft shows enemy HQ as a legal destination over D7 enemy and battles only on landing', async () => {
   render(<LocalGame initial={scenario('highFlight')} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'D5 P1 飛行機' }));
   const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
   expect(destination).toHaveClass('legal');
@@ -99,6 +102,7 @@ test('D5 aircraft shows enemy HQ as a legal destination over D7 enemy and battle
 test('an enemy on C lane no longer blocks it; cancel still never moves', async () => {
   const initial = scenario('aircraft');
   render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'block', owner: 2, type: 'spy', position: 'C4' }] }} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 P2 工兵' }));
@@ -110,6 +114,7 @@ test('an enemy on C lane no longer blocks it; cancel still never moves', async (
 });
 test('capture renders result and ends move entry', async () => {
   render(<LocalGame initial={scenario('capture')} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 空き' }));
   expect(screen.queryByText('P1の勝利')).not.toBeInTheDocument();
@@ -120,6 +125,7 @@ test('capture renders result and ends move entry', async () => {
 test('a second click on the pending destination uses the same move path only once', async () => {
   const onChange = vi.fn();
   render(<LocalGame initial={scenario('capture')} onChange={onChange} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
   const destination = screen.getByRole('button', { name: 'HQ-P2 空き' });
   await user.click(destination);
@@ -136,6 +142,7 @@ test('a second click on the pending destination uses the same move path only onc
 test('rapid repeated confirmation events cannot commit the same turn twice', async () => {
   const onChange = vi.fn();
   render(<LocalGame initial={scenario('capture')} onChange={onChange} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
   const destination = screen.getByRole('button', { name: 'D7 空き' });
   await user.click(destination);
@@ -147,6 +154,7 @@ test('a different destination, another own piece, or an illegal square never con
   const initial = scenario('capture');
   const onChange = vi.fn();
   render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'other-own', owner: 1, type: 'spy', position: 'E2' }] }} onChange={onChange} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 空き' }));
@@ -163,6 +171,7 @@ test('a different destination, another own piece, or an illegal square never con
 test('ambiguous HQ lanes require a lane before re-click, then re-click confirms', async () => {
   const onChange = vi.fn();
   render(<LocalGame initial={scenario('aircraft')} onChange={onChange} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
   await user.click(destination);
@@ -178,6 +187,7 @@ test('an enemy on C lane still requires a lane; D re-click works and CPU turn ca
   const initial = scenario('aircraft');
   const onChange = vi.fn();
   const { unmount } = render(<LocalGame initial={{ ...initial, pieces: [...initial.pieces, { id: 'block', owner: 2, type: 'spy', position: 'C4' }] }} onChange={onChange} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   const destination = screen.getByRole('button', { name: 'HQ-P2 P2 工兵' });
@@ -189,6 +199,7 @@ test('an enemy on C lane still requires a lane; D re-click works and CPU turn ca
   expect(onChange.mock.calls[0][0].events.at(-1)).toMatchObject({ kind: 'MOVE', move: { lane: 'D' } });
   unmount();
   render(<LocalGame initial={{ ...initial, turn: 2 }} mode="cpu" />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   expect(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' })).toBeDisabled();
 });
 
@@ -226,7 +237,7 @@ test('draft swaps autosave, READY blocks edits, unlock restores, both ready star
   await user.click(screen.getByRole('button', { name: 'この配置で確定' }));
   expect(onStart).toHaveBeenCalledOnce(); expect(onStart.mock.calls[0][0].pieces).toHaveLength(46);
 });
-test('storage rejects corrupt data and reports write failure', () => {
+test('storage rejects corrupt data and reports write failure', async () => {
   localStorage.setItem('military-chess:dev-draft:v1:1', '{broken');
   expect(localDraftStore.load(1)).toBeNull();
   localStorage.setItem('military-chess:dev-draft:v1:1', '[{}]');
@@ -252,6 +263,7 @@ test('CPU match hides opponent types and automatically takes its turn', async ()
   const game = scenario('aircraft');
   const onChange = vi.fn();
   render(<LocalGame initial={{ ...game, turn: 2 }} onChange={onChange} mode="cpu" difficulty="normal" cpuSeed={9750} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   expect(screen.getByRole('heading', { name: 'CPUの手番' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'HQ-P2 P2 工兵' })).not.toBeInTheDocument();
@@ -303,8 +315,9 @@ test('setup board and inventory show the same icon above every formal piece name
   });
 });
 
-test('CPU match shows own icon and name without adding an enemy icon or name', () => {
+test('CPU match shows own icon and name without adding an enemy icon or name', async () => {
   const { container } = render(<LocalGame initial={scenario('aircraft')} mode="cpu" />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   const own = screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' });
   expect(own.querySelector('.piece-icon')).toHaveTextContent('✈️');
   expect(own.querySelector('.piece-name')).toHaveTextContent('飛行機');
@@ -317,6 +330,7 @@ test('CPU match shows own icon and name without adding an enemy icon or name', (
 
 test('invalid destination keeps selection, confirmation names own piece, and cancel keeps the game unchanged', async () => {
   const { container } = render(<LocalGame initial={scenario('capture')} />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'C7 P1 大将' }));
   await user.click(screen.getByRole('button', { name: 'B8 空き' }));
   expect(screen.getByRole('button', { name: 'C7 P1 大将' })).toHaveAttribute('aria-pressed', 'true');
@@ -332,6 +346,7 @@ test('invalid destination keeps selection, confirmation names own piece, and can
 test('CPU thinking locks board and public move text never names its piece', async () => {
   const game = scenario('aircraft');
   const { container } = render(<LocalGame initial={{ ...game, turn: 2 }} mode="cpu" cpuSeed={2} />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   expect(container.querySelector('.thinking')).toHaveTextContent('コンピューターが考えています');
   expect(container.querySelectorAll('.board .cell:not(:disabled)')).toHaveLength(0);
   expect(screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' })).toBeDisabled();
@@ -341,6 +356,7 @@ test('auto PASS and a finished CPU match explain result and reveal postgame posi
   const initial = scenario('capture');
   const passed = { ...initial, events: [{ kind: 'START' as const, firstPlayer: 1 as const }, { kind: 'AUTO_PASS' as const, actor: 2 as const }] };
   const { rerender, container } = render(<LocalGame initial={passed} mode="cpu" />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   expect(container.querySelector('.pass-event')).toHaveTextContent('コンピューターは合法な移動がないため、自動的に手番が移りました');
   expect(screen.queryByText('終局後の全駒・初期配置・戦闘を確認')).not.toBeInTheDocument();
   const ended = applyMove(initial, { from: 'C7', to: 'HQ-P2' });
@@ -366,6 +382,7 @@ test('home dialogue receives focus and Escape cancels replacement', async () => 
 test('battle confirmation and history conceal the enemy type until the CPU match ends', async () => {
   const initial = scenario('aircraft');
   const { container, rerender } = render(<LocalGame initial={initial} mode="cpu" />); const user = userEvent.setup();
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   await user.click(screen.getByRole('button', { name: 'HQ-P1 P1 飛行機' }));
   await user.click(screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' }));
   expect(container.querySelector('.confirm')).toHaveTextContent('戦闘になります');
@@ -380,9 +397,10 @@ test('battle confirmation and history conceal the enemy type until the CPU match
 test.each([
   [{ winner: 2 as const, reason: 'HQ_CAPTURE' as const }, 'あなたの敗北'],
   [{ winner: null, reason: 'FIFTY_NONCOMBAT_MOVES' as const }, '引き分け'],
-])('CPU final result %j is understandable', (result, label) => {
+])('CPU final result %j is understandable', async (result, label) => {
   const game = scenario('capture');
   render(<LocalGame initial={{ ...game, result, turn: null }} mode="cpu" />);
+  await waitFor(() => expect(document.querySelector(".board")).not.toBeNull());
   expect(screen.getByText(label)).toBeInTheDocument();
   expect(screen.getByText(`終局理由：${result.reason === 'HQ_CAPTURE' ? 'コンピューターがあなたの司令部を占領' : '戦闘なし50手'}`)).toBeInTheDocument();
 });

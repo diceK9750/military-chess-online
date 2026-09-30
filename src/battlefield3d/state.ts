@@ -8,6 +8,7 @@ export interface BattlefieldViewState {
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;
+  readonly battleSite: Site | null;
   readonly pieces: readonly BattlefieldPiece[];
   readonly lastMove: { readonly from: Site; readonly to: Site } | null;
   readonly interaction: BattlefieldInteraction;
@@ -23,6 +24,7 @@ export interface BattlefieldInteraction {
 export interface BattlefieldHandlers {
   onSiteSelect(site: Site): void;
   onLaneSelect(lane: 'C' | 'D'): void;
+  onAnimationChange?(active: boolean): void;
 }
 const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };
 
@@ -38,7 +40,7 @@ export function toBattlefieldView(game: GameState, viewer: Player, interaction: 
       ? { owner: piece.owner, position, unknown: false, type: piece.type }
       : { owner: piece.owner, position, unknown: true });
   }
-  return { viewer, moveCount: game.moveCount, finished: game.result !== null, pieces,
+  return { viewer, moveCount: game.moveCount, finished: game.result !== null, battleSite: last?.battle ? last.move.to : null, pieces,
     lastMove: last ? { from: last.move.from, to: last.move.to } : null,
     interaction: { selectedSite: interaction.selectedSite, legalTargets: [...interaction.legalTargets], pendingSite: interaction.pendingSite,
       laneCandidates: [...interaction.laneCandidates], selectedLane: interaction.selectedLane, interactionEnabled: interaction.interactionEnabled && !game.result } };
