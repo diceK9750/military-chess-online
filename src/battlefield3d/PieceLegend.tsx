@@ -1,0 +1,3 @@
+import {PIECES,PIECE_TYPES} from '../game/pieces';
+const hints={general:'三本の大兜・最長の外套',lieutenantGeneral:'双角兜・厚い肩装備',majorGeneral:'一本の兜飾り・短い外套',colonel:'背旗・三段の肩章',lieutenantColonel:'頭部飾り・二段の肩章',major:'平帽・一段の肩章',captain:'三つの帽章・長い銃剣',lieutenant:'二つの帽章・長銃',secondLieutenant:'一つの帽章・短銃',aircraft:'大きな翼・尾翼・プロペラ',tank:'履帯・砲塔・長い砲身',engineer:'黄帽・工具・背負い袋',cavalry:'馬の首と耳・騎手',spy:'黒いフード・細身の隠密姿勢',mine:'低い設置器・警告色・突起',flag:'大きな旗と旗手'} as const;
+export function PieceLegend(){return <div className="piece-legend">{PIECE_TYPES.map(type=><div key={type}><strong>{PIECES[type].label}</strong><span>{hints[type]}</span></div>)}</div>;}

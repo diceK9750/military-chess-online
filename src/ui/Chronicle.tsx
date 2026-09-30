@@ -6,6 +6,7 @@ import { BattlefieldView } from '../battlefield3d/BattlefieldView';
 import {cinemaDelay,cinemaShot} from '../battlefield3d/cinemaPresentation';
 import { Board } from './Board';
 import { CommandDeck } from './CommandDeck';
+const chapterIcons:Record<string,string>={開戦:'⚑',序盤:'➜',初接触:'⚔',初の突破:'↗',本陣圧迫:'⌂',重要駒撃破:'◆',決定打:'★',終局:'◎'};
 
 export function Chronicle({ game, initial, onClose, onSave, onTitle }: { game: GameState; initial: { readonly p1: readonly Piece[]; readonly p2: readonly Piece[] }; onClose(): void; onSave?(): void; onTitle?(): void }) {
   const recording = useMemo(() => {
@@ -27,7 +28,7 @@ export function Chronicle({ game, initial, onClose, onSave, onTitle }: { game: G
   const { frames, scenes, chapters } = recording, frame = frames[index], scene = scenes[index];
   const event = [...frame.events].reverse().find(e => e.kind === 'MOVE');
   const seek = (value: number) => { setPlaying(false); setIndex(value); };
-  const commands = <CommandDeck><div className="actions"><button className="secondary" onClick={onClose}>結果画面へ戻る</button>{onSave && <button onClick={onSave}>対局を保存</button>}{onTitle && <button onClick={onTitle}>タイトルへ</button>}</div>
+  const commands = <CommandDeck><p className="next-action">見どころで場面を選ぶ → 「再生」 → 0.5／1／2倍で鑑賞。「前の手」「次の手」で詳しく確認できます。</p><div className="actions"><button className="secondary" onClick={onClose}>結果画面へ戻る</button>{onSave && <button onClick={onSave}>対局を保存</button>}{onTitle && <button onClick={onTitle}>タイトルへ</button>}</div>
     <div className="chronicle-controls">
       <button className="secondary" disabled={!index} onClick={() => seek(index - 1)}>前の手</button>
       <button className="primary" onClick={() => { if (index === frames.length - 1) setIndex(0); setPlaying(p => !p); }}>{playing ? '一時停止' : index === frames.length - 1 ? '最初から再生' : '再生'}</button>
@@ -36,7 +37,7 @@ export function Chronicle({ game, initial, onClose, onSave, onTitle }: { game: G
       <span>{playing ? '再生中' : '一時停止'} · {index} / {game.moveCount}手</span>
     </div>
     <label className="chronicle-slider">手数 <input aria-label="再現手数" type="range" min="0" max={frames.length - 1} value={index} onChange={e => seek(Number(e.target.value))} /></label>
-    <nav className="chronicle-chapters" aria-label="戦史の見どころ"><strong>見どころ</strong>{chapters.map(chapter => <button className="secondary" key={chapter.index + chapter.title} aria-label={`${chapter.title} 第${chapter.index}手`} aria-pressed={index === chapter.index} onClick={() => seek(chapter.index)}>{chapter.title}<small>第{chapter.index}手</small></button>)}</nav>
+    <nav className="chronicle-chapters" aria-label="戦史の見どころ"><strong>見どころ</strong>{chapters.map(chapter => <button className="secondary" key={chapter.index + chapter.title} aria-label={`${chapter.title} 第${chapter.index}手`} aria-pressed={index === chapter.index} onClick={() => seek(chapter.index)}><span aria-hidden="true">{chapterIcons[chapter.title]??'◆'} </span>{chapter.title}<small>第{chapter.index}手</small></button>)}</nav>
 </CommandDeck>;
   return <section className={'chronicle' + (fallback ? ' has-fallback' : '')} aria-label="戦史再現">
     <div className="chronicle-heading"><div><small>CINEMATIC CHRONICLE · 終局後の正式記録</small><h3>戦史映画 — 二つの本陣</h3><p>{game.moveCount}手の戦いを、部隊の行軍と戦史官の解説で追体験</p></div></div>

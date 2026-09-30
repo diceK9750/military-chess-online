@@ -98,14 +98,16 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
   }
 
   const commands = <CommandDeck>
-    <label className="formation-control">陣形を変更 <select aria-label="陣形を変更" value={formation} onChange={event => changeFormation(event.target.value)}><option value="">現在の配置</option><optgroup label="標準陣形">{FORMATION_TEMPLATES.map(template => <option key={template.id} value={template.id}>{{ balanced: '攻守分担', rush: '速攻', defense: '守備重視', 'flag-guard': '軍旗防御' }[template.category]} {template.id.endsWith('-left') ? '左' : '右'}</option>)}</optgroup></select></label>
+    <p className="next-action" role="status">{selectedPiece?`${PIECES[selectedPiece.type].label}を選択中。金枠の入れ替え先を選ぶ → 自作陣形を保存 → 配置確定。`:'次の操作：駒を2枚選んで交換。整ったら「現在の配置を保存」、最後に「この配置で確定」。'}</p>
     <FormationLibrary pieces={pieces} onApply={next => { validatePlacement(next,1); setPieces([...next]); setSelected(null); setFormation(''); const saved=onPlacementChange?.(next); const draft=store.save(1,next); setNotice(saved !== false && draft ? '自作陣形を適用して配置を保存しました。' : '配置は適用しましたが、自動保存できませんでした。'); }} />
+    <label className="formation-control">陣形を変更 <select aria-label="陣形を変更" value={formation} onChange={event => changeFormation(event.target.value)}><option value="">現在の配置</option><optgroup label="標準陣形">{FORMATION_TEMPLATES.map(template => <option key={template.id} value={template.id}>{{ balanced: '攻守分担', rush: '速攻', defense: '守備重視', 'flag-guard': '軍旗防御' }[template.category]} {template.id.endsWith('-left') ? '左' : '右'}</option>)}</optgroup></select></label>
     {selectedPiece && <div className="selection-panel"><strong>選択中：{PIECES[selectedPiece.type].label}（{selected}）・交換可能 {targets.length}地点</strong><button className="secondary" onClick={() => { setSelected(null); setNotice('選択を解除しました。'); }}>選択を解除</button></div>}
     <p className="notice" role="status">{notice}</p>
     <details className="inventory"><summary>自軍の駒一覧・枚数を見る</summary><p>23枚はすべて盤面に配置済みです。駒の名前から選ぶこともできます。</p><div className="inventory-grid">{PIECE_TYPES.map(type => {
       const group = pieces.filter(piece => piece.type === type);
       return <div key={type} className="inventory-type"><PieceFace type={type} /><strong>{group.filter(piece => piece.position).length}/{PIECES[type].count}枚</strong><span>残り {PIECES[type].count - group.filter(piece => piece.position).length}枚</span><div>{group.map(piece => <button key={piece.id} className="secondary" aria-pressed={selected === piece.position} onClick={() => piece.position && select(piece.position)}>{piece.position ?? '未配置'}</button>)}</div></div>;
     })}</div></details>
+    <p className="setup-ready">{valid?'✓ 23/23枚 · 開始可能':'配置を確認してください'} · 名前付きで残すなら、上の自作陣形を保存</p>
     <button className="primary wide" disabled={!valid} onClick={confirm}>この配置で確定</button>
     <p className="muted setup-footnote">配置は自動保存され、「続きから」再開できます。</p>
 

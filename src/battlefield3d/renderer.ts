@@ -12,6 +12,7 @@ import { allowBattleCamera, motionProfile } from './presentation';
 import { fullCameraDistance } from './camera';
 import { qualityProfile } from './settings';
 import { approachingEnemies, snapTarget } from './assistance';
+import { addOfficerRegalia, officerLook } from './regalia';
 
 export interface BattlefieldRenderer {
   readonly backend: 'webgpu' | 'webgl2';
@@ -318,8 +319,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const mineDevice=geometry(new THREE.CylinderGeometry(.27,.32,.2,8));
     const rankBases = [geometry(new THREE.BoxGeometry(.65,.06,.65)), geometry(new THREE.CylinderGeometry(.36,.36,.06,16)), geometry(new THREE.CylinderGeometry(.39,.39,.08,6))];
     const rankPip = geometry(new THREE.IcosahedronGeometry(.075,0));
-    const rankBand = geometry(new THREE.BoxGeometry(.47,.055,.1));
-    const capPeak = geometry(new THREE.BoxGeometry(.35,.045,.22));
+    const regaliaShapes={box:geometry(new THREE.BoxGeometry(1,1,1)),cylinder:geometry(new THREE.CylinderGeometry(.5,.5,1,6)),cone:geometry(new THREE.ConeGeometry(.5,1,6))};
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
     for (const owner of [1, 2] as const) {
       const z = owner === 1 ? 4.1 : -4.1, surface = owner === state.viewer ? blue : red;
@@ -381,7 +381,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const base = mesh(badge, baseWood, x, .075, z, group); base.rotation.y = piece.owner === 1 ? 0 : Math.PI; base.userData = { site: piece.position };
         const uniform = own ? blue : red;
         const style = identity(piece);
-        const stature = style.rank ? .88 + style.rank * .027 : 1;
+        const stature = officerLook(style.rank).height;
         const part = (shape: THREE.BufferGeometry, surface: THREE.Material, dx: number, y: number, dz = 0) => {
           const object = mesh(shape, surface, x + dx, .2 + (y-.2)*stature, z + dz, group);
           object.userData = { site: piece.position }; return object;
@@ -403,22 +403,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
             part(rankBases[family-1],accent,0,.24);
             // Large, non-text insignia repeat the 3/2/1 tier on the base and helmet.
             for(let i=0;i<tier;i++) part(rankPip,accent,(i-(tier-1)/2)*.18,.3,.3);
-            part(capPeak,accent,0,.77,.08).scale.set(family===3?1.2:1,family===3?2:1,1);
-            if(family===2)for(let i=0;i<tier;i++)part(rankBand,accent,0,.35+i*.085,.2);
-            if(family===1)part(helmet,pale,0,.78).scale.set(1.25,1,1.25);
-            // Family silhouettes: tall crested generals, broad epauletted colonels, compact officers.
-            part(body, uniform, 0, .43).scale.set(family === 2 ? 1.55 : 1.15, family === 3 ? 1.55 : 1, 1);
-            for (let i = 0; i < tier; i++) {
-              part(insignia, accent, (i-(tier-1)/2)*.13, .53, .22).scale.set(1.25,1.4,1);
-              const crest = part(insignia, accent, (i-(tier-1)/2)*.15, family === 3 ? .89 : .81);
-              crest.scale.set(1.6, family === 3 ? 4.4 : family === 2 ? 2.2 : 1.2, 2.2);
-            }
-            for (const side of [-1,1]) part(equipment,accent,side*.2,.57).scale.set(.65,family===2?1.7:1,.8);
-            if (family === 3) { part(cloak,accent,0,.38,-.16).scale.set(1.2,1.5,.65); part(tool,brass,.28,.48).rotation.z=-.3; }
-            // Tier silhouettes: standard / twin horns / single plume, in addition to 3/2/1 pips.
-            if(tier===3){part(flagCloth,accent,-.28,1.02,-.15).scale.set(.55,.8,1);part(pole,uniform,-.4,.66,-.15).scale.y=.9;}
-            if(tier===2)for(const side of [-1,1])part(tool,accent,side*.22,.84).rotation.z=side*.55;
-            if(tier===1)part(cloak,accent,0,.9).scale.set(.45,.7,.45);
+            const colors={gold:brass,silver,pale,uniform,dark};
+            addOfficerRegalia(style.rank,(shape,color,dx,y,dz,sx,sy,sz,rz=0)=>{const o=part(regaliaShapes[shape],colors[color],dx,y,dz);o.scale.set(sx,sy*stature,sz);o.rotation.z=rz;});
           } else if (piece.type === 'aircraft') {
             part(fuselage, silver, 0, .56).rotation.x=Math.PI/2;
             part(equipment,silver,0,.6).scale.set(2.65,1,2.3);
@@ -454,7 +440,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         }
         const text = piece.unknown ? piece.position.startsWith('HQ') ? '敵駒' : '?' : PIECES[piece.type].label;
         const engraving = mesh(baseName, label(text, '#2b251d', '#c8a779', true), x, .223, z + .22, group); engraving.rotation.x = -Math.PI / 2; engraving.userData = { site: piece.position };
-        const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, 1.14, z, group);
+        const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, Math.max(1.14,1.2*stature), z, group);
         plaque.renderOrder=5;
         plaque.userData = { site: piece.position }; billboards.push(plaque);
       }

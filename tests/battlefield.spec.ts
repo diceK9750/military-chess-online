@@ -294,11 +294,15 @@ test('3D fixed presets replace drag and zoom without changing placement; top-dow
   const blank=(await canvas.boundingBox())!;await page.mouse.move(blank.x+5,blank.y+5);
   await expect(canvas).not.toHaveAttribute('data-hover-site',/./);
   const beforeZoom = await canvas.screenshot();
+  const beforeScroll = await page.evaluate(() => window.scrollY);
   const pose = await canvas.getAttribute('data-camera-pose');
   const box = (await canvas.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(100);
+  // Wheel scrolling can clip the canvas by a fraction of a CSS pixel on mobile.
+  // Compare the same viewport crop while still requiring identical rendered pixels and pose.
+  await page.evaluate(y => window.scrollTo({top:y,behavior:'instant'}), beforeScroll);
   await canvas.scrollIntoViewIfNeeded();const currentBounds=(await canvas.boundingBox())!;await page.mouse.move(currentBounds.x+5,currentBounds.y+5);
   await expect(canvas).not.toHaveAttribute('data-hover-site',/./);
   expect((await canvas.screenshot()).equals(beforeZoom)).toBe(true);

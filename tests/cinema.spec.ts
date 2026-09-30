@@ -20,6 +20,9 @@ for(const [width,height] of [[1920,1080],[1440,900],[1280,720],[430,932],[390,84
  const before=await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY);
  await page.getByRole('button',{name:'戦史再現',exact:true}).click();const canvas=page.locator('canvas');await expect(canvas).toHaveAttribute('data-mode','cinematic');await expect(canvas).toHaveAttribute('data-unit-count','46');
  await page.screenshot({path:info.outputPath('cinema-opening.png'),fullPage:true});
+ await page.locator('.battlefield-key summary').click();await expect(page.locator('.piece-legend>div')).toHaveCount(16);await page.locator('.battlefield-key summary').click();
+ await page.getByRole('button',{name:'自軍正面',exact:true}).click();await canvas.scrollIntoViewIfNeeded();await page.waitForTimeout(100);await canvas.screenshot({path:info.outputPath('cinema-identities-front.png')});
+ await page.getByRole('button',{name:'真上',exact:true}).click();await canvas.scrollIntoViewIfNeeded();await page.waitForTimeout(100);await canvas.screenshot({path:info.outputPath('cinema-identities-top.png')});await page.waitForTimeout(3100);
  await page.getByText(/戦場設定 ·/).click();const settings=page.getByRole('combobox',{name:'描画品質'});
  const budgets:unknown[]=[];
  for(const [quality,followers] of [['high','3'],['standard','2'],['light','1']] as const){await settings.selectOption(quality);await expect(canvas).toHaveAttribute('data-quality',quality);await expect(canvas).toHaveAttribute('data-followers',followers);await expect.poll(async()=>Number(await canvas.getAttribute('data-draw-calls'))).toBeLessThan(300);budgets.push({quality,calls:await canvas.getAttribute('data-draw-calls'),triangles:await canvas.getAttribute('data-triangles'),pixelRatio:await canvas.getAttribute('data-pixel-ratio')});}

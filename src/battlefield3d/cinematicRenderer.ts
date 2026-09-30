@@ -6,6 +6,7 @@ import type {BattlefieldRenderer} from './renderer';
 import {qualityProfile} from './settings';
 import {PIECES} from '../game/pieces';
 import {identity} from './identity';
+import {addOfficerRegalia,officerLook} from './regalia';
 import {fullCameraDistance} from './camera';
 
 import {cinemaTiming} from './cinemaPresentation';
@@ -22,10 +23,10 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
  const geo=<T extends THREE.BufferGeometry>(g:T)=>{geometries.add(g);return g;};
  const mat=(c:string)=>{const m=new THREE.MeshLambertMaterial({color:c,flatShading:true});materials.add(m);return m;};
  const box=geo(new THREE.BoxGeometry(1,1,1)),cylinder=geo(new THREE.CylinderGeometry(.5,.5,1,6)),cone=geo(new THREE.ConeGeometry(.5,1,6)),head=geo(new THREE.IcosahedronGeometry(.5,0)),plane=geo(new THREE.PlaneGeometry(1,1));
- const soil=mat('#887552'),grass=mat('#73845c'),road=mat('#b49a70'),wood=mat('#604731'),river=mat('#537f87'),blue=mat('#477aa0'),red=mat('#9b4d43'),skin=mat('#d4c4a4'),dark=mat('#263232'),gold=mat('#e4c060'),silver=mat('#cbd9d8'),amber=mat('#e4b352'),olive=mat('#626e48');
+ const soil=mat('#887552'),grass=mat('#73845c'),road=mat('#b49a70'),wood=mat('#604731'),river=mat('#537f87'),blue=mat('#477aa0'),red=mat('#9b4d43'),skin=mat('#d4c4a4'),dark=mat('#263232'),gold=mat('#e4c060'),silver=mat('#cbd9d8'),pale=mat('#9bcdd4'),amber=mat('#e4b352'),olive=mat('#626e48');
  function mesh(g:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,sx:number,sy:number,sz:number,parent:THREE.Object3D){const o=new THREE.Mesh(g,m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);parent.add(o);return o;}
  const textCache=new Map<string,THREE.Material>(),labels:THREE.Object3D[]=[];
- function text(value:string){if(textCache.has(value))return textCache.get(value)!;const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d')!;x.fillStyle='#162e34e8';x.fillRect(0,0,512,96);x.fillStyle='#fff1c7';x.font='bold 54px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(value,256,50,495);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;textures.add(t);const m=new THREE.MeshBasicMaterial({map:t,transparent:true,depthTest:false});materials.add(m);textCache.set(value,m);return m;}
+ function text(value:string,tone='plain'){const key=tone+value;if(textCache.has(key))return textCache.get(key)!;const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d')!;x.fillStyle=tone==='general'?'#e4c060':tone==='colonel'?'#cbd9d8':'#162e34e8';x.fillRect(0,0,512,96);x.fillStyle=tone==='plain'?'#fff1c7':'#192f33';x.font='bold 54px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(value,256,50,495);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;textures.add(t);const m=new THREE.MeshBasicMaterial({map:t,transparent:true,depthTest:false});materials.add(m);textCache.set(key,m);return m;}
  function sign(value:string,x:number,y:number,z:number,width:number,parent:THREE.Object3D){const o=mesh(plane,text(value),x,y,z,width,width*.1875,1,parent);o.renderOrder=10;labels.push(o);return o;}
  mesh(box,soil,0,-.3,0,12,.5,13,terrain);mesh(box,grass,0,-.08,0,7,.12,9,terrain);
  // No chess grid or piece bases: an abstract encampment with two actual crossing roads.
@@ -63,22 +64,24 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
   const model=(kind:string,dx:number,dz:number,commander:boolean)=>{
    const b=new THREE.Group();b.position.set(dx,0,dz);g.add(b);
    const part=(shape:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,sx:number,sy:number,sz:number)=>mesh(shape,m,x,y,z,sx,sy,sz,b);
-   if(kind==='aircraft'){part(cone,silver,0,.72,0,.25,.85,.25).rotation.x=Math.PI/2;part(box,silver,0,.74,0,.95,.06,.25);part(box,uniform,0,.84,-.3,.35,.25,.04);part(box,dark,0,.72,.42,.06,.5,.04);return;}
-   if(kind==='tank'){part(box,olive,0,.3,0,.55,.28,.7);for(const x of [-.3,.3])part(box,dark,x,.19,0,.12,.23,.78);part(cylinder,olive,0,.52,0,.3,.2,.3);part(cylinder,dark,0,.54,.3,.05,.5,.05).rotation.x=Math.PI/2;return;}
-   if(kind==='mine'){for(const x of [-.16,.16])part(cylinder,dark,x,.07,0,.2,.1,.2);return;}
-   if(kind==='cavalry'){part(box,wood,0,.4,0,.24,.25,.5);part(cone,wood,0,.65,.19,.17,.35,.21);for(const x of [-.08,.08])for(const z of [-.17,.17])part(box,dark,x,.19,z,.05,.32,.06);}
+   if(kind==='aircraft'){part(cone,silver,0,.72,0,.23,1,.23).rotation.x=Math.PI/2;part(box,silver,0,.74,0,1.16,.07,.29);part(box,uniform,0,.85,-.4,.06,.32,.23);part(box,uniform,0,.75,-.4,.46,.06,.2);part(head,dark,0,.72,.48,.14,.14,.14);part(box,dark,0,.72,.53,.045,.65,.04);return;}
+   if(kind==='tank'){part(box,olive,0,.32,0,.65,.3,.8);for(const x of [-.34,.34]){part(box,dark,x,.19,0,.15,.25,.9);for(const z of [-.3,0,.3])part(cylinder,silver,x,.2,z,.12,.06,.12).rotation.z=Math.PI/2;}part(cylinder,olive,0,.56,0,.42,.25,.42);part(cylinder,dark,0,.59,.37,.07,.7,.07).rotation.x=Math.PI/2;return;}
+   if(kind==='mine'){for(const x of [-.17,.17]){part(cylinder,dark,x,.09,0,.27,.14,.27);part(cylinder,amber,x,.17,0,.22,.025,.22);for(const dz of [-.08,.08])part(cone,silver,x,.24,dz,.045,.12,.045);}return;}
+   if(kind==='cavalry'){part(box,wood,0,.44,0,.31,.31,.65);part(box,dark,0,.64,.19,.09,.26,.25);part(cone,wood,0,.73,.26,.19,.39,.24);part(box,wood,0,.87,.34,.16,.13,.24);for(const x of [-.06,.06])part(cone,dark,x,.98,.29,.05,.16,.05);for(const x of [-.1,.1])for(const z of [-.22,.22])part(box,dark,x,.19,z,.06,.4,.07);}
    const y=kind==='cavalry'?.35:0,low=kind==='spy'?.78:1;
-   part(kind==='spy'?cone:cylinder,kind==='spy'?dark:uniform,0,(.33+y)*low,0,.24,.37,.19);part(head,skin,0,(.58+y)*low,0,.16,.16,.16);part(cone,kind==='engineer'?amber:uniform,0,(.71+y)*low,0,.23,.18,.2);
+   part(kind==='spy'?cone:cylinder,kind==='spy'?dark:uniform,0,(.33+y)*low,0,kind==='spy'?.19:.24,.37,.19);part(head,skin,0,(.58+y)*low,0,.16,.16,.16);part(kind==='spy'?cone:cylinder,kind==='spy'?dark:kind==='engineer'?amber:uniform,0,(.71+y)*low,0,kind==='engineer'?.34:.23,kind==='spy'?.26:.12,.24);
    if(kind!=='cavalry')for(const x of [-.07,.07])part(box,dark,x,.1,0,.06,.2,.07);
    for(const x of [-.16,.16])part(box,uniform,x,(.34+y)*low,0,.07,.27,.08);
-   if(kind==='flag'||commander&&style.rank>=7){part(cylinder,wood,-.17,.6+y,0,.025,1.2,.025);part(box,gold,.03,.97+y,0,.4,.3,.025);}
-   if(kind==='engineer'){part(box,wood,0,.35,-.16,.28,.22,.15);part(box,silver,.2,.35,.05,.07,.45,.07);part(box,silver,.2,.6,.05,.3,.06,.07);}
-   if(style.rank&&commander){const tier=(style.rank-1)%3+1,family=Math.ceil(style.rank/3),accent=family===3?gold:family===2?silver:amber;for(let i=0;i<tier;i++)part(cone,accent,(i-(tier-1)/2)*.08,.85+y,0,.06,.16,.06);part(cone,accent,0,.3+y,-.07,.3,.4,.2);}
+   if(kind==='flag'){part(cylinder,wood,-.3,.75,0,.035,1.5,.035);part(box,gold,.05,1.19,0,.69,.57,.035);part(box,uniform,.05,1.19,.025,.55,.43,.02);part(cone,gold,-.3,1.55,0,.09,.15,.09);}
+   if(kind==='engineer'){part(box,amber,0,.37,.08,.27,.19,.06);part(box,wood,0,.35,-.18,.3,.3,.18);part(cylinder,olive,0,.55,-.18,.33,.12,.12).rotation.z=Math.PI/2;part(box,wood,.2,.35,.05,.06,.57,.06);part(box,silver,.2,.67,.05,.32,.06,.07);part(box,silver,-.21,.19,.08,.19,.2,.05);}
+   if(kind==='spy'){part(cone,dark,0,.33,-.08,.23,.55,.25);part(box,silver,.16,.23,.12,.025,.18,.04).rotation.z=.4;b.rotation.x=-.12;}
+   if(style.rank&&commander){b.scale.y=officerLook(style.rank).height;const shapes={box,cylinder,cone},colors={gold,silver,pale,uniform,dark};addOfficerRegalia(style.rank,(shape,color,x,y,z,sx,sy,sz,rz=0)=>{part(shapes[shape],colors[color],x,y,z,sx,sy,sz).rotation.z=rz;});}
   };
   model(type,0,0,true);
   const followers=['aircraft','tank','mine','spy'].includes(type)?0:qualityProfile(state.quality??'standard').followers;
   for(let i=0;i<followers;i++)model(type==='cavalry'?'cavalry':type==='engineer'?'engineer':'soldier',(i%2===0?-.24:.24),-.28-Math.floor(i/2)*.22,false);
-  const plaque=sign(piece.unknown?'不明駒':PIECES[piece.type].label,0,1.32,0,.76,g);plaque.rotation.y=-g.rotation.y;
+  const plaque=sign(piece.unknown?'不明駒':PIECES[piece.type].label,0,Math.max(1.45,1.26*officerLook(style.rank).height),0,.76,g);plaque.rotation.y=-g.rotation.y;
+  if(!piece.unknown&&style.rank>=4)plaque.material=text(PIECES[piece.type].label,style.rank>=7?'general':'colonel');
   return g;
  }
  /** Static squads share geometry/material draw calls. Moving actors remain separate groups. */

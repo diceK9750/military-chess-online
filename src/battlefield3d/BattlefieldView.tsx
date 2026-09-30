@@ -5,6 +5,7 @@ import type { BattlefieldRenderer } from './renderer';
 import { VictoryCelebration } from './VictoryCelebration';
 import { autoQuality, readVisualSettings, VISUAL_SETTINGS_KEY, type QualityChoice } from './settings';
 import { approachingEnemies } from './assistance';
+import {PieceLegend} from './PieceLegend';
 
 export function BattlefieldView({ state, onSiteSelect, onLaneSelect, onDragStart, onPieceDrop, onAnimationChange, onUnavailable, endgame, commands, caption }: { state: BattlefieldViewState; commands?: ReactNode; caption?: ReactNode; onUnavailable?(): void; endgame?: { fresh?: boolean; label: string; reason: string; onNew?(): void; onReplay?(): void; onSave?(): void } } & BattlefieldHandlers) {
   const host = useRef<HTMLDivElement>(null);
@@ -84,6 +85,7 @@ export function BattlefieldView({ state, onSiteSelect, onLaneSelect, onDragStart
     </div>
     <details className="battlefield-settings"><summary>戦場設定 · {quality === 'light' ? '軽量' : quality === 'high' ? '高品質' : '標準'}</summary><label>描画品質 <select aria-label="描画品質" disabled={busy} value={settings.quality} onChange={e=>setSettings(v=>({...v,quality:e.target.value as QualityChoice}))}><option value="auto">自動</option><option value="high">高品質</option><option value="standard">標準</option><option value="light">軽量</option></select></label><label><input aria-label="戦況レイヤー" type="checkbox" checked={settings.overlay} disabled={busy} onChange={e=>setSettings(v=>({...v,overlay:e.target.checked}))}/>戦況レイヤー</label><small>敵の接近位置・突破口・公開情報の経路。敵の攻撃範囲や勝率ではありません。</small>{settings.overlay&&<p role="status">自軍本陣付近の敵 {approachingEnemies(state).length}枚 · 選択駒の合法地点 {new Set(state.interaction.legalTargets).size}か所</p>}{settingError&&<p role="status">{settingError}</p>}</details>
     {caption}
+    <p className="next-action battlefield-next" role="status" aria-label="次の操作">{setup?(interaction.selectedSite?'② 金枠の入れ替え先を選ぶ → 軍議操作で陣形保存・配置確定':'① 自軍駒を選ぶ → ② 入れ替える → ③ 陣形保存・配置確定'):replay?'見どころで場面を選ぶ → 再生 → 速度を変更。操作は下の軍議操作へ。':state.finished?'対局終了。結果を確認し、新しい対局・戦史再現・保存へ。':busy?'移動・戦闘を表示中。完了するまでお待ちください。':state.playerTurn!==state.viewer?'CPUの手番。応手をお待ちください。':interaction.pendingSite?interaction.laneCandidates.length>1&&!interaction.selectedLane?'③ C列／D列を選ぶ → 再タップまたは「確定して実行」':'③ 移動先を再タップ、または「確定して実行」':interaction.selectedSite?'② 金枠の移動先を選ぶ':'あなたの手番 · ① 自軍駒を選ぶ'}{setup&&<button className="secondary" onClick={()=>host.current?.parentElement?.querySelector('.formation-library')?.scrollIntoView({block:'start',behavior:'instant'})}>陣形保存・読込へ</button>}</p>
     <div className="battlefield-stage" ref={host} aria-label="現在の戦場">
       <div className="battlefield-hq" aria-label="本陣の所属と駒">{([state.viewer, state.viewer === 1 ? 2 : 1] as const).map(owner => {
         const own = owner === state.viewer, site = `HQ-P${owner}`;
@@ -97,7 +99,7 @@ export function BattlefieldView({ state, onSiteSelect, onLaneSelect, onDragStart
       {status !== 'ready' && <p className="battlefield-status" role={status === 'error' ? 'alert' : 'status'}>{status === 'error' ? '三次元表示を利用できません。二次元盤面で続けられます。' : '戦場を読み込んでいます…'}</p>}
     </div>
     <div className="battlefield-guide"><span>{setup ? '2枚をタップ／駒をドラッグして交換' : replay ? '発 → 着の軌跡と解説で追体験 · 見どころから移動できます' : state.finished ? '最後の手を確認し、戦史再現や保存へ' : '駒→移動先→再タップで確定／ドラッグで着手'}</span><span>視点は上のボタンで変更 · 回転・拡大の誤操作なし</span></div>
-    <details className="battlefield-key"><summary>駒の見分け方</summary><p><span className="rank-key generals">⬡ 金＝将官</span><span className="rank-key colonels">● 銀＝佐官</span><span className="rank-key officers">■ 水色＝尉官</span> · 各群の印は強い順に3・2・1。飛行機は翼、騎兵は馬、工兵は黄ヘルメットと工具、スパイは黒いフード、軍旗は大きな旗。敵の不明駒は共通外見です。</p></details>
+    <details className="battlefield-key"><summary>駒の見分け方</summary><p><span className="rank-key generals">⬡ 金＝将官・兜と外套</span><span className="rank-key colonels">● 銀＝佐官・肩章</span><span className="rank-key officers">■ 水色＝尉官・軽装と銃</span> · 各群の印は強い順に3・2・1。敵の不明駒は共通外見です。</p><PieceLegend/></details>
     {interaction.laneCandidates.length > 1 && <div className="battlefield-lanes" aria-label="三次元の使用列">{interaction.laneCandidates.map(lane => <button key={lane} aria-pressed={interaction.selectedLane === lane} disabled={!interaction.interactionEnabled} onClick={() => onLaneSelect(lane)}>三次元 {lane}列</button>)}</div>}
     <p className="battlefield-selection" role="status">{setup ? interaction.selectedSite ? `${name} ${interaction.selectedSite}・金枠が交換先` : '自軍23枚のみ表示・CPU配置は非表示' : replay ? '鑑賞専用・着手と保存状態は変更されません' : state.finished ? '終局・全駒公開' : busy ? '移動・戦闘を表示中・操作は少しお待ちください' : !interaction.interactionEnabled ? 'CPUの手番' : interaction.pendingSite ? `${name} ${interaction.selectedSite} → ${interaction.pendingSite}・確定待ち` + (interaction.laneCandidates.length > 1 && !interaction.selectedLane ? '・使用列を選択' : `${interaction.selectedLane ? `・${interaction.selectedLane}列` : ''}・再タップで実行`) : interaction.selectedSite ? `${name} ${interaction.selectedSite}・移動可能 ${new Set(interaction.legalTargets).size}地点` : '青＝自軍 / 赤＝敵軍 · 金枠＋移＝合法移動先'}</p>
     {commands}
