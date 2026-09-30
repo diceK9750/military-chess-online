@@ -87,14 +87,22 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     const paused = await page.getByRole('slider', { name: '再現手数' }).inputValue();
     await page.waitForTimeout(550);
     expect(await page.getByRole('slider', { name: '再現手数' }).inputValue()).toBe(paused);
+    // Freeze the brief effect for assertions/screenshots, even on a busy software GPU.
+    await page.clock.install();
+    const captureTime=await page.evaluate(()=>Date.now());
+    await page.clock.pauseAt(new Date(captureTime+60_000));
     await seek(page, battleIndex - 1);
+    await page.clock.runFor(350);
     await page.getByRole('button', { name: '全景', exact: true }).click();
     await page.getByRole('button', { name: '次の手', exact: true }).click();
+    await page.clock.runFor(100);
     await expect(canvas).toHaveAttribute('data-battle-effect', /ATTACKER|DEFENDER|MUTUAL/);
     await expect(canvas).toHaveAttribute('data-camera-director', 'manual');
     await page.screenshot({ path: info.outputPath(`battle-${width}.png`), fullPage: true });
+    await page.clock.runFor(850);
     await expect(canvas).not.toHaveAttribute('data-battle-effect', /./);
     await seek(page, 12);
+    await page.clock.runFor(850);
     await page.screenshot({ path: info.outputPath(`chronicle-${width}.png`), fullPage: true });
     await seek(page, match.game.moveCount);
     const expected = match.game.pieces.filter(p => p.position).map(p => `${p.position} ${p.owner === 1 ? '自軍' : '敵軍'} ${PIECES[p.type].label}`).sort();

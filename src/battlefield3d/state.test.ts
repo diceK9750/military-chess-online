@@ -56,6 +56,19 @@ test('viewer 2 has the same information boundary', () => {
   expect(view.pieces.filter(piece => piece.owner === 1).every(piece => piece.unknown)).toBe(true);
   expect(view.pieces.filter(piece => piece.owner === 2).every(piece => !piece.unknown)).toBe(true);
 });
+
+test.each([1,2] as const)('HQ territory never determines piece secrecy for viewer %s, even on a restored board',viewer=>{
+  const own=viewer,enemy=viewer===1?2:1;
+  const game:GameState={...scenario('highFlight'),pieces:[
+    {id:'own-HQ',owner:own,type:'general',position:`HQ-P${enemy}`},
+    {id:'enemy-HQ',owner:enemy,type:'aircraft',position:`HQ-P${own}`},
+  ]};
+  for(const restored of [game,JSON.parse(JSON.stringify(game)) as GameState]){
+    const view=toBattlefieldView(restored,viewer);
+    expect(view.pieces.find(p=>p.owner===own)).toMatchObject({unknown:false,type:'general'});
+    expect(view.pieces.find(p=>p.owner===enemy)).toEqual({owner:enemy,position:`HQ-P${own}`,unknown:true});
+  }
+});
 test('interaction is allowlisted, detached, and disabled at game end', () => {
   const interaction = { selectedSite: 'D5' as const, legalTargets: ['D6' as const], pendingSite: null, laneCandidates: ['C' as const, 'D' as const], selectedLane: undefined, interactionEnabled: true, secret: 'not allowed' };
   const view = toBattlefieldView(scenario('highFlight'), 1, interaction);

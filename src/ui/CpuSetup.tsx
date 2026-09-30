@@ -58,14 +58,19 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
       if (pieces.some(piece => piece.position === site)) { setSelected(site); setNotice(`${site} の駒を選びました。枠の付いた地点を選ぶと入れ替わります。`); }
       return;
     }
-    const next = exchange(pieces, selected, site);
+    swap(selected, site);
+  }
+
+  function swap(from: Site, to: Site) {
+    if (from === to || !territory(1).includes(from) || !territory(1).includes(to)) return;
+    const next = exchange(pieces, from, to);
     try {
       validatePlacement(next, 1);
       setPieces(next);
       setFormation('');
       const savedSetup = onPlacementChange?.(next);
       const savedDraft = store.save(1, next);
-      setNotice(savedSetup !== false && savedDraft ? `${selected} と ${site} を入れ替え、ブラウザへ保存しました。` : '配置は変更しましたが、ブラウザへ保存できませんでした。');
+      setNotice(savedSetup !== false && savedDraft ? `${from} と ${to} を入れ替え、ブラウザへ保存しました。` : '配置は変更しましたが、ブラウザへ保存できませんでした。');
       setSelected(null);
     } catch (error) { setNotice(placementError(error)); }
   }
@@ -95,7 +100,9 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
     <p className="muted">難易度：{difficulty === 'easy' ? 'かんたん' : 'ふつう'}。23地点は最初から埋まっています。駒を2枚選ぶと配置を交換できます。</p>
     <p className="setup-progress" role="status">{valid ? '✓ 配置完了。この配置で対局を始められます。' : `配置中：${placed} / 23枚`}</p>
     <label className="formation-control">陣形を変更 <select aria-label="陣形を変更" value={formation} onChange={event => changeFormation(event.target.value)}><option value="">現在の配置</option>{FORMATION_TEMPLATES.map(template => <option key={template.id} value={template.id}>{{ balanced: '攻守分担', rush: '速攻', defense: '守備重視', 'flag-guard': '軍旗防御' }[template.category]} {template.id.endsWith('-left') ? '左' : '右'}</option>)}</select></label>
-    <BattlefieldView state={battlefield} onSiteSelect={select} onLaneSelect={() => {}} onUnavailable={() => setFallback(true)} />
+    <BattlefieldView state={battlefield} onSiteSelect={select} onLaneSelect={() => {}} onDragStart={site => { setSelected(site); setNotice('金枠へドラッグして交換できます。'); }} onPieceDrop={(from, to) => {
+      swap(from, to);
+    }} onUnavailable={() => setFallback(true)} />
     {fallback && <><p className="board-guide">下があなた側。B列・E列の境界が突破口です。</p><Board pieces={pieces} perspective={1} selected={selected} targets={targets} humanSide={1} onSelect={select} /><div className="board-legend" aria-label="盤面の記号"><span>太枠＝選択中</span><span>金枠＝交換可能</span><span>HQ＝司令部</span></div></>}
     {selectedPiece && <div className="selection-panel"><strong>選択中：{PIECES[selectedPiece.type].label}（{selected}）・交換可能 {targets.length}地点</strong><button className="secondary" onClick={() => { setSelected(null); setNotice('選択を解除しました。'); }}>選択を解除</button></div>}
     <p className="notice" role="status">{notice}</p>

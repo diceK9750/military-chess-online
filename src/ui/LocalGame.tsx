@@ -111,10 +111,24 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     // Illegal sites leave the current selection unchanged.
   }
   const chosen = pending.find(move => move.lane === lane);
-  function execute() {
-    if (!chosen || cpuThinking || animationBusy.current || game.result || committedMoveCount.current === game.moveCount) return;
-    try { const next = applyMove(game, chosen); committedMoveCount.current = game.moveCount; setGame(next); onChange?.(next); setSelected(null); setPending([]); setLane(undefined); setError(''); setNotice(''); }
+  function commit(move: Move | undefined) {
+    if (!move || cpuThinking || animationBusy.current || game.result || committedMoveCount.current === game.moveCount) return;
+    try { const next = applyMove(game, move); committedMoveCount.current = game.moveCount; setGame(next); onChange?.(next); setSelected(null); setPending([]); setLane(undefined); setError(''); setNotice(''); }
     catch { setError('この手は実行できません。駒と移動先を選び直してください。'); }
+  }
+  function execute() { commit(chosen); }
+  function dragStart(site: Site) {
+    if (game.result || cpuThinking || animationBusy.current || !game.pieces.some(p => p.position === site && p.owner === game.turn)) return;
+    battlefieldInput.current = true;
+    setSelected(site); setPending([]); setLane(undefined); setNotice('');
+  }
+  function drop(from: Site, to: Site, column?: 'C' | 'D') {
+    if (game.result || cpuThinking || animationBusy.current) return;
+    const candidates = moves.filter(move => move.from === from && move.to === to);
+    const move = candidates.length === 1 ? candidates[0] : candidates.find(m => m.lane === column);
+    if (move) { commit(move); return; }
+    if (candidates.length) { setSelected(from); setPending(candidates); setLane(undefined); }
+    else setNotice('移動できない地点です。駒は元の位置に戻りました。');
   }
   function cancel() { setSelected(null); setPending([]); setLane(undefined); setNotice('選択を解除しました。'); }
   // Stable across animation feedback: UI updates must not restart a running animation.
@@ -132,9 +146,9 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
     {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
     <div className="triple-layout play-layout"><RuleReference side="left" /><div className={"game-surfaces" + (fallback ? " has-fallback" : "")}>
-<BattlefieldView state={battlefieldState} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
+<BattlefieldView state={battlefieldState} onDragStart={dragStart} onPieceDrop={drop} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
     {mode==='cpu'&&<Intelligence view={publicView} enabled={intelligence} hypotheses={hypotheses} focus={analysisSite} onFocus={setAnalysisSite} onToggle={()=>{playCue('analysis');setIntelligence(value=>{const next=!value;try{localStorage.setItem(INTELLIGENCE_KEY,String(next));}catch{/* Optional preference only. */}return next;});}} />}
-    {mode==='cpu'&&guide&&!game.result&&<small className="first-guide">兵士を選択 → 金色の移動先。ドラッグで戦場を見る。AI参謀は公開情報だけを解析。</small>}
+    {mode==='cpu'&&guide&&!game.result&&<small className="first-guide">自軍→金枠→再タップ、または駒をドラッグ。空き領域で視点を回転。</small>}
 <div className="play-main">
     <div className="toolbar">{mode === 'debug' && <label>盤面の向き <select aria-label="盤面の向き" value={perspective} onChange={event => setPerspective(Number(event.target.value) as Player)}><option value="1">P1を下側</option><option value="2">P2を下側</option></select></label>}<span className="muted">戦闘なし {game.noncombatCount} / 50手</span></div>
     {fallback && <p className="board-guide">上が{mode === 'cpu' ? 'コンピューター' : 'P2'}側、下が{mode === 'cpu' ? 'あなた' : 'P1'}側。B列・E列が突破口です。</p>}

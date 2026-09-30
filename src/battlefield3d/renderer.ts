@@ -9,6 +9,7 @@ import { TapGesture } from './gesture';
 import { createBackend } from './backend';
 import { identity } from './identity';
 import { allowBattleCamera, motionProfile } from './presentation';
+import { fullCameraDistance } from './camera';
 
 export interface BattlefieldRenderer {
   readonly backend: 'webgpu' | 'webgl2';
@@ -38,6 +39,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
   const billboards: THREE.Object3D[] = [];
+  const hqSigns: { owner: 1 | 2; sign: THREE.Mesh; curtain: THREE.Mesh }[] = [];
   const labelPosition=new THREE.Vector3();
   let busy = false;
   function animationStatus(active: boolean) { if (busy !== active) { busy = active; handlers.onAnimationChange?.(active); } }
@@ -52,6 +54,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   let restoreFocus: (() => void) | undefined;
   let lastManual=-Infinity;
   let dragStart:{id:number;x:number;y:number}|null=null;
+  let pieceDrag: { id: number; from: Site; x: number; y: number; active: boolean; moveCount: number } | null = null;
+  const dragGhost = new THREE.Group(); scene.add(dragGhost);
+  const pointerIds = new Set<number>();
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let state = initial;
   let disposed = false;
@@ -81,8 +86,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       ctx.fillText(line, 128, wide ? 50 : lines.length === 1 ? 132 : index === 0 ? 85 : 182, 225);
     });
     const texture = new THREE.CanvasTexture(bitmap); texture.colorSpace = THREE.SRGBColorSpace; textures.add(texture);
-    const surface = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }); materials.add(surface); labelCache.set(key, surface); return surface;
+    const surface = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, depthTest: false }); materials.add(surface); labelCache.set(key, surface); return surface;
   }
+  const ghostShape=geometry(new THREE.ConeGeometry(.3,.65,5));
+  const ghostSurface=new THREE.MeshBasicMaterial({color:'#a9f1ef',transparent:true,opacity:.55});materials.add(ghostSurface);
   function requestDraw() {
     if (disposed || frame) return;
     frame = requestAnimationFrame(now => {
@@ -92,9 +99,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const moving = animateFrame?.(now) ?? false;
         const effects = effectsFrame?.(now) ?? false;
         const active = moving || effects;
-        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.12,Math.max(.85,labelPosition.distanceTo(camera.position)/15)));});
+        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12)));});
         renderer.render(scene, camera);
-        if (!moving) { animateFrame=undefined; animationStatus(false); }
+        if (!moving) animateFrame=undefined;
+        if (!active) animationStatus(false);
         if (!effects) effectsFrame=undefined;
         if (active) requestDraw();
       } catch { onFailure(); }
@@ -103,19 +111,19 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   function setCamera(preset: CameraPreset, manual=false) {
     if(manual)lastManual=performance.now();
     cameraPreset = preset;
-    const distance = Math.min(30, Math.max(13, 11 / camera.aspect));
+    const distance = fullCameraDistance(camera.aspect);
     const side = state.viewer === 1 ? 1 : -1;
     if (preset === 'top') {
-      controls.target.set(0, 0, 0);
-      camera.position.set(0, Math.min(34, Math.max(13, 10 / camera.aspect)), side * .001);
+      controls.target.set(0, .25, 0);
+      camera.position.set(0, fullCameraDistance(camera.aspect, true), side * .001);
     } else if (preset === 'front' || preset === 'selected') {
       const point = preset === 'selected' && state.interaction.selectedSite ? sitePoint(state.interaction.selectedSite) : { x: 0, z: side * 2 };
       const near = Math.min(24, Math.max(7, 7 / camera.aspect));
       controls.target.set(point.x, .3, point.z);
       camera.position.set(point.x, near * .78, point.z + side * near * .7);
     } else {
-      controls.target.set(0, 0, 0);
-      camera.position.set(0, distance * .78, side * distance * .7);
+      controls.target.set(0, .25, 0);
+      camera.position.set(0, distance * .86, side * distance * .6);
     }
     controls.update(); requestDraw();
   }
@@ -131,17 +139,76 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     renderer.setSize(width, height, false); camera.aspect = width / height; camera.updateProjectionMatrix(); setCamera(cameraPreset);
   }
   function lost(event: Event) { event.preventDefault(); onFailure(); }
-  function down(event: PointerEvent) { if (event.button === 0) {if(dragStart)lastManual=performance.now();else dragStart={id:event.pointerId,x:event.clientX,y:event.clientY};gesture.down(event.pointerId, event.clientX, event.clientY);} }
-  function movePointer(event: PointerEvent) { if(dragStart&&Math.hypot(event.clientX-dragStart.x,event.clientY-dragStart.y)>6)lastManual=performance.now();gesture.move(event.pointerId, event.clientX, event.clientY); }
-  function wheel(){lastManual=performance.now();}
-  function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); }
-  function up(event: PointerEvent) {
-    dragStart=null;
-    if (!gesture.up(event.pointerId, event.clientX, event.clientY) || !state.interaction.interactionEnabled || animateFrame) return;
+  function pick(event: PointerEvent, ground = false) {
     const bounds = canvas.getBoundingClientRect();
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return;
     raycaster.setFromCamera(new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1), camera);
-    const hit = raycaster.intersectObjects([...units.children, ...overlays.children, ...pickables], true).find(value => value.object.userData.site || value.object.userData.lane);
+    const floor=raycaster.intersectObjects(pickables,true)[0];
+    if(ground)return floor;
+    const hit=raycaster.intersectObjects([...units.children,...overlays.children,...pickables],true).find(value=>value.object.userData.site||value.object.userData.lane);
+    if(hit?.object.userData.lane)return hit;
+    // Upright labels can project over a farther cell. A legal floor target wins over that label.
+    if(floor&&state.interaction.selectedSite&&state.interaction.legalTargets.includes(floor.object.userData.site as Site))return floor;
+    return hit;
+  }
+  function cancelDrag() {
+    pieceDrag = null; dragGhost.clear(); controls.enableRotate = true;
+    canvas.style.cursor='grab';
+    delete canvas.dataset.dragging; requestDraw();
+  }
+  function down(event: PointerEvent) {
+    if (event.button !== 0) return;
+    pointerIds.add(event.pointerId);
+    gesture.down(event.pointerId, event.clientX, event.clientY);
+    if (pointerIds.size > 1) { cancelDrag(); lastManual = performance.now(); return; }
+    dragStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    const site = pick(event)?.object.userData.site as Site | undefined;
+    const own = state.pieces.find(p => p.position === site && p.owner === state.viewer && !p.unknown);
+    if (own && state.interaction.interactionEnabled && !animateFrame && !effectsFrame && handlers.onPieceDrop) {
+      pieceDrag = { id: event.pointerId, from: own.position, x: event.clientX, y: event.clientY, active: false, moveCount: state.moveCount };
+      controls.enableRotate = false; canvas.setPointerCapture(event.pointerId);
+    }
+  }
+  function movePointer(event: PointerEvent) {
+    gesture.move(event.pointerId, event.clientX, event.clientY);
+    if (pieceDrag?.id === event.pointerId) {
+      if (!pieceDrag.active && Math.hypot(event.clientX-pieceDrag.x,event.clientY-pieceDrag.y)>6) {
+        pieceDrag.active = true; handlers.onDragStart?.(pieceDrag.from);
+        // A lightweight ghost uses only a known own piece's visible material.
+        dragGhost.add(new THREE.Mesh(ghostShape,ghostSurface));
+        canvas.dataset.dragging = pieceDrag.from;
+      }
+      if (pieceDrag.active) {
+        const hit = pick(event, true);
+        if (hit) { dragGhost.position.set(hit.point.x, .8, hit.point.z); canvas.style.cursor=state.interaction.legalTargets.includes(hit.object.userData.site as Site)?'copy':'not-allowed'; }
+        else { dragGhost.position.set(0,-20,0); canvas.style.cursor='not-allowed'; }
+        requestDraw();
+      }
+      return;
+    }
+    if(dragStart&&Math.hypot(event.clientX-dragStart.x,event.clientY-dragStart.y)>6)lastManual=performance.now();
+    if (!pointerIds.size) canvas.style.cursor = state.interaction.interactionEnabled && pick(event) ? 'pointer' : 'grab';
+  }
+  function wheel(){lastManual=performance.now();}
+  function cancelPointer(event: PointerEvent) { gesture.cancel(event.pointerId); pointerIds.delete(event.pointerId); dragStart=null; cancelDrag(); }
+  function up(event: PointerEvent) {
+    pointerIds.delete(event.pointerId);
+    const drag = pieceDrag;
+    if (drag?.id === event.pointerId) {
+      const hit = pick(event, true); cancelDrag(); canvas.style.cursor='grab';
+      if (drag.active) {
+        gesture.cancel(event.pointerId); dragStart=null;
+        if (state.interaction.interactionEnabled && !animateFrame && !effectsFrame && state.moveCount === drag.moveCount && hit) {
+          const to = hit.object.userData.site as Site;
+          const lane = drag.from.startsWith('HQ') && to.startsWith('HQ') ? hit.point.x < 0 ? 'C' : 'D' : undefined;
+          handlers.onPieceDrop?.(drag.from, to, lane);
+        }
+        return;
+      }
+    }
+    dragStart=null;
+    if (!gesture.up(event.pointerId, event.clientX, event.clientY) || !state.interaction.interactionEnabled || animateFrame || effectsFrame) return;
+    const hit = pick(event);
     if (!hit) return;
     if (hit.object.userData.lane) handlers.onLaneSelect(hit.object.userData.lane as 'C' | 'D');
     else handlers.onSiteSelect(hit.object.userData.site as Site);
@@ -150,8 +217,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     if (disposed) return; disposed = true;
     cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); observer?.disconnect();
     canvas.removeEventListener('webglcontextlost', lost);
-    canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', movePointer);
-    canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', cancelPointer);
+    canvas.removeEventListener('pointerdown', down, true); canvas.removeEventListener('pointermove', movePointer);
+    canvas.removeEventListener('pointerup', up, true); canvas.removeEventListener('pointercancel', cancelPointer, true);
     canvas.removeEventListener('wheel',wheel);
     controls.removeEventListener('change', requestDraw); controls.dispose();
     geometries.forEach(value => value.dispose()); materials.forEach(value => value.dispose()); textures.forEach(value => value.dispose());
@@ -181,12 +248,15 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     }
     const bridge = geometry(new THREE.BoxGeometry(0.65, 0.09, 0.56));
     const rail = geometry(new THREE.BoxGeometry(0.045, 0.1, 0.56));
+    const bridgeSign = geometry(new THREE.PlaneGeometry(.75,.23));
     for (const crossing of BRIDGES) {
       const { x } = sitePoint(crossing.from);
       mesh(bridge, wood, x, 0.12, 0);
       for (const offset of [-0.31, 0.31]) mesh(rail, wood, x + offset, 0.2, 0);
+      const tag=mesh(bridgeSign,label(crossing.from[0]+' 突破口','#32281d','#ffe3a2',true),x,.26,0);tag.rotation.x=-Math.PI/2;
     }
     const face = geometry(new THREE.PlaneGeometry(0.8, 0.29));
+    const geometryTag = geometry(new THREE.PlaneGeometry(.45,.19));
     const body = geometry(new THREE.CylinderGeometry(.13, .19, .27, 6));
     const headShape = geometry(new THREE.IcosahedronGeometry(.13, 0));
     const helmet = geometry(new THREE.CylinderGeometry(.17, .18, .1, 6));
@@ -203,13 +273,21 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const horse = geometry(new THREE.BoxGeometry(.32, .22, .48));
     const cloak = geometry(new THREE.ConeGeometry(.23, .35, 5));
     const pole = geometry(new THREE.CylinderGeometry(0.025, 0.025, 0.85, 5));
+    const silver=material('#d4e0df'),pale=material('#9bcdd4'),olive=material('#647550'),amber=material('#e5b54a'),violet=material('#575177');
+    const fuselage=geometry(new THREE.ConeGeometry(.12,.6,6));
+    const propeller=geometry(new THREE.BoxGeometry(.08,.4,.035));
+    const track=geometry(new THREE.BoxGeometry(.13,.2,.65));
+    const shovel=geometry(new THREE.BoxGeometry(.15,.14,.05));
+    const flagCloth=geometry(new THREE.BoxGeometry(.45,.28,.035));
+    const mineDevice=geometry(new THREE.CylinderGeometry(.27,.32,.2,8));
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
     for (const owner of [1, 2] as const) {
       const z = owner === 1 ? 4.1 : -4.1, surface = owner === state.viewer ? blue : red;
-      mesh(curtain, surface, 0, 0.38, z);
+      const banner = mesh(curtain, surface, 0, 0.38, z);
       for (const x of [-0.94, 0.94]) mesh(pole, wood, x, 0.45, z);
-      const sign = mesh(geometry(new THREE.PlaneGeometry(0.8, 0.4)), label(`本陣 P${owner}`, '#ece4cd', owner === state.viewer ? '#375f78' : '#86534b'), 0, 0.48, z + (owner === 1 ? -0.03 : 0.03));
+      const sign = mesh(geometry(new THREE.PlaneGeometry(1.45, 0.3)), label(owner === state.viewer ? '自軍本陣' : '敵軍本陣', '#ece4cd', owner === state.viewer ? '#375f78' : '#86534b', true), 0, 0.64, z + (owner === 1 ? -0.03 : 0.03));
       sign.rotation.y = owner === 1 ? Math.PI : 0;
+      hqSigns.push({ owner, sign, curtain: banner });
     }
     // Fixed scenery independent of every piece and its type.
     const trunk = geometry(new THREE.CylinderGeometry(0.035, 0.05, 0.4, 5));
@@ -246,51 +324,82 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       const movingPiece = transition ? previous.pieces.find(piece => piece.position === transition.from) : undefined;
       animateFrame = undefined;
       state = next; units.clear(); overlays.clear(); billboards.length = 0;
+      if (pieceDrag && (next.moveCount !== pieceDrag.moveCount || !next.interaction.interactionEnabled)) cancelDrag();
+      for (const hq of hqSigns) {
+        const own = hq.owner === state.viewer;
+        hq.curtain.material = own ? blue : red;
+        hq.sign.material = label(own ? '自軍本陣' : '敵軍本陣', '#ece4cd', own ? '#375f78' : '#86534b', true);
+      }
       const moving = new THREE.Group();
       for (const piece of state.pieces) {
         const { x, z } = sitePoint(piece.position), own = piece.owner === state.viewer;
         const group = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
         const base = mesh(badge, baseWood, x, .075, z, group); base.rotation.y = piece.owner === 1 ? 0 : Math.PI; base.userData = { site: piece.position };
         const uniform = own ? blue : red;
+        const style = identity(piece);
+        const stature = style.rank ? .88 + style.rank * .027 : 1;
         const part = (shape: THREE.BufferGeometry, surface: THREE.Material, dx: number, y: number, dz = 0) => {
-          const object = mesh(shape, surface, x + dx, y, z + dz, group);
+          const object = mesh(shape, surface, x + dx, .2 + (y-.2)*stature, z + dz, group);
           object.userData = { site: piece.position }; return object;
         };
-        part(body, uniform, 0, .4);
-        part(headShape, skin, 0, .63);
-        part(helmet, uniform, 0, .74);
-        for (const side of [-1, 1]) {
-          part(limb, dark, side * .09, .23);
-          const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
-        }
-        // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
-        const style = identity(piece);
-        if (!piece.unknown) {
-          if (style.rank) {
-            for (let i = 0; i < Math.ceil(style.rank / 3); i++) {
-              const badge = part(insignia, brass, (i - 1) * .1, .5, .15);
-              badge.scale.x = .8 + ((style.rank - 1) % 3) * .15;
-            }
-            if (style.rank >= 7) part(equipment, brass, .2, .4, -.1).rotation.z = -.4;
-          } else if (piece.type === 'aircraft') {
-            part(equipment, brass, 0, .47, -.16).scale.x = 1.6;
-          } else if (piece.type === 'tank') {
-            part(armor, dark, 0, .43); part(equipment, brass, 0, .46, .18);
-          } else if (piece.type === 'engineer') {
-            part(equipment, wood, .23, .26); part(tool, dark, -.23, .45);
-          } else if (piece.type === 'cavalry') {
-            part(horse, wood, 0, .27, -.18); part(headShape, wood, 0, .48, -.38);
-          } else if (piece.type === 'spy') {
-            part(cloak, dark, 0, .43);
-          } else if (piece.type === 'flag') {
-            part(pole, wood, .24, .52); part(equipment, uniform, .36, .86);
-          } else if (piece.type === 'mine') {
-            part(equipment, dark, 0, .23, .24); part(insignia, brass, 0, .29, .24);
+        if (piece.unknown || piece.type !== 'mine') {
+          part(body, uniform, 0, .4);
+          part(headShape, skin, 0, .63);
+          part(helmet, uniform, 0, .74);
+          for (const side of [-1, 1]) {
+            part(limb, dark, side * .09, .23);
+            const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
           }
         }
-        const text = piece.unknown ? '?' : PIECES[piece.type].label;
+        // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
+        if (!piece.unknown) {
+          if (style.rank) {
+            const family = Math.ceil(style.rank / 3), tier = (style.rank - 1) % 3 + 1;
+            const accent = family === 3 ? brass : family === 2 ? silver : pale;
+            // Family silhouettes: tall crested generals, broad epauletted colonels, compact officers.
+            part(body, uniform, 0, .43).scale.set(family === 2 ? 1.55 : 1.15, family === 3 ? 1.55 : 1, 1);
+            for (let i = 0; i < tier; i++) {
+              part(insignia, accent, (i-(tier-1)/2)*.13, .53, .22).scale.set(1.25,1.4,1);
+              const crest = part(insignia, accent, (i-(tier-1)/2)*.15, family === 3 ? .89 : .81);
+              crest.scale.set(1, family === 3 ? 3.2 : family === 2 ? 1.8 : 1, 1.5);
+            }
+            for (const side of [-1,1]) part(equipment,accent,side*.2,.57).scale.set(.65,family===2?1.7:1,.8);
+            if (family === 3) { part(cloak,accent,0,.38,-.16).scale.set(1.2,1.5,.65); part(tool,brass,.28,.48).rotation.z=-.3; }
+          } else if (piece.type === 'aircraft') {
+            part(fuselage, silver, 0, .61).rotation.x=Math.PI/2;
+            part(equipment,silver,0,.65).scale.set(2.1,1,2);
+            part(equipment,brass,0,.78,-.23).scale.set(.8,2,1);
+            part(propeller,dark,0,.61,.27);
+          } else if (piece.type === 'tank') {
+            part(armor, olive, 0, .35).scale.set(1.5,1,2);
+            for(const side of [-1,1]) part(track,dark,side*.28,.27);
+            part(helmet,olive,0,.62).scale.set(1.3,1.5,1.3);
+            const barrel=part(tool,brass,0,.61,.25);barrel.rotation.x=Math.PI/2;barrel.scale.y=1.3;
+          } else if (piece.type === 'engineer') {
+            part(helmet,amber,0,.77).scale.set(1.2,1,1.2);
+            part(armor,wood,0,.39,-.16).scale.set(.9,.9,.65);
+            part(tool,silver,.27,.46).rotation.z=-.35;part(equipment,silver,.33,.67).scale.set(.7,1,1);
+            part(tool,wood,-.27,.45).rotation.z=.3;part(shovel,silver,-.33,.25);
+          } else if (piece.type === 'cavalry') {
+            part(horse,wood,0,.38).scale.set(1.2,1.2,1.3);
+            for(const dx of [-.14,.14])for(const dz of [-.2,.2])part(limb,dark,dx,.2,dz).scale.y=1.5;
+            part(cloak,wood,0,.59,.23).scale.set(.55,1.1,.75);part(headShape,wood,0,.79,.25).scale.set(.85,1,1.5);
+            part(tool,brass,-.28,.66).scale.y=1.7;
+          } else if (piece.type === 'spy') {
+            part(cloak,violet,0,.4).scale.set(1.4,1.7,1.1);part(cloak,dark,0,.77).scale.set(.9,.8,.9);
+            part(insignia,silver,0,.64,.14).scale.x=2.1;
+          } else if (piece.type === 'flag') {
+            part(pole,wood,.24,.6).scale.y=1.2;
+            part(flagCloth,brass,.33,.89);part(insignia,uniform,.33,.89,.03).scale.set(2.5,2.5,1);
+          } else if (piece.type === 'mine') {
+            // A device silhouette, rather than another standing infantryman.
+            part(mineDevice,dark,0,.31);for(let i=0;i<6;i++){const angle=i/6*Math.PI*2;part(insignia,amber,Math.cos(angle)*.22,.36,Math.sin(angle)*.22).scale.y=2;}
+          }
+        }
+        const text = piece.unknown ? piece.position.startsWith('HQ') ? '敵駒' : '?' : PIECES[piece.type].label;
         const engraving = mesh(baseName, label(text, '#2b251d', '#c8a779', true), x, .223, z + .22, group); engraving.rotation.x = -Math.PI / 2; engraving.userData = { site: piece.position };
-        const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#f2e8ca' : '#743e36', true), x, 1.01, z, group);
+        const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, 1.14, z, group);
+        plaque.renderOrder=5;
         plaque.userData = { site: piece.position }; billboards.push(plaque);
       }
       units.add(moving);
@@ -343,7 +452,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           if(t===1){restoreFocus?.();fxGroup.clear();delete canvas.dataset.battleEffect;return false;}return true;
         };
       } else if(next.moveCount!==previous.moveCount&&!transition){restoreFocus?.();fxGroup.clear();effectsFrame=undefined;delete canvas.dataset.battleEffect;}
-      animationStatus(!!animateFrame);
+      animationStatus(!!animateFrame || !!effectsFrame);
       if (cameraPreset === 'selected' || next.viewer !== previous.viewer) setCamera(cameraPreset);
       const interaction = state.interaction;
       canvas.dataset.analysisCount=String(state.analysis?.hypotheses.length??0);
@@ -361,10 +470,16 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const { x, z } = sitePoint(site);
         const mark = mesh(site.startsWith('HQ') ? wideRing : ring, site === interaction.pendingSite ? pendingMaterial : site === interaction.selectedSite ? selectedMaterial : gold, x, 0.13, z, overlays);
         mark.rotation.x = -Math.PI / 2; mark.userData = { site };
+        if (site === interaction.selectedSite || site === interaction.pendingSite) mark.scale.setScalar(1.16);
+        const text=site===interaction.pendingSite?'予定':site===interaction.selectedSite?'選択':state.phase==='setup'?'交換':'移';
+        const tag=mesh(geometryTag,label(text,'#29261d',site===interaction.pendingSite?'#ffd58d':site===interaction.selectedSite?'#adf5f0':'#ffe18a',true),x,.3,z+.34,overlays);
+        tag.userData={site};tag.renderOrder=6;billboards.push(tag);
       }
+      if(interaction.selectedSite&&interaction.pendingSite){const a=sitePoint(interaction.selectedSite),b=sitePoint(interaction.pendingSite),dir=new THREE.Vector3(b.x-a.x,0,b.z-a.z);const shaft=mesh(arrowShaft,pendingMaterial,(a.x+b.x)/2,.25,(a.z+b.z)/2,overlays);shaft.scale.y=dir.length();shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());}
       for (const lane of interaction.laneCandidates) {
         const path = mesh(pathShape, lane === interaction.selectedLane ? pendingMaterial : gold, lane === 'C' ? -0.5 : 0.5, 0.72, 0, overlays);
         path.userData = { lane };
+        const tag=mesh(geometryTag,label(lane+'列','#25241f','#ffe18a',true),lane==='C'?-.5:.5,.82,0,overlays);tag.userData={lane};billboards.push(tag);
       }
       if (state.battleSite) {
         const point = sitePoint(state.battleSite);
@@ -384,8 +499,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     }
     canvas.setAttribute('aria-label', '操作可能な三次元戦場'); canvas.setAttribute('role', 'img');
     host.append(canvas); canvas.addEventListener('webglcontextlost', lost);
-    canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', movePointer);
-    canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', cancelPointer);
+    canvas.addEventListener('pointerdown', down, true); canvas.addEventListener('pointermove', movePointer);
+    canvas.addEventListener('pointerup', up, true); canvas.addEventListener('pointercancel', cancelPointer, true);
     canvas.addEventListener('wheel',wheel,{passive:true});
     controls.addEventListener('change', requestDraw);
     // Do not mutate canvas dimensions inside a ResizeObserver delivery cycle.

@@ -113,3 +113,48 @@
 .app-shell--playing:has(.game-surfaces.has-fallback .intelligence-panel):has(.confirm)>main { overflow:visible; }
 .game-surfaces.has-fallback:has(.intelligence-panel):has(.confirm) { height:auto; }
 .game-surfaces.has-fallback:has(.intelligence-panel):has(.confirm) .play-main { flex:0 0 auto; }
+
+/* The board owns the available space; HQ affiliation is separate from its occupant. */
+.battlefield-hq { position:absolute; inset:8px 10px auto; display:flex; justify-content:space-between; gap:8px; z-index:1; pointer-events:none; }
+.battlefield-hq span { display:flex; flex-direction:column; padding:4px 8px; border:1px solid #81b5c6; border-radius:6px; background:#122c39e8; font-size:12px; line-height:1.4; }
+.battlefield-hq .enemy-hq { border-color:#cb9582; background:#492c28e8; }
+.battlefield-hq small { font-size:10px; }
+.battlefield-header { padding:4px 10px; }
+.battlefield-header button { min-height:32px; }
+.battlefield-cameras { gap:4px; padding:0 10px 4px; }
+.battlefield-cameras button { padding:3px 8px; min-height:32px; }
+.battlefield-guide { padding:3px 10px 0; font-size:11px; }
+.battlefield-selection { padding:3px 10px 5px; }
+.battlefield-stage { height:clamp(440px,65vh,740px); }
+.battlefield-stage canvas { cursor:grab; }
+.has-fallback .battlefield-hq { display:none; }
+@media (min-width:1200px) and (min-height:800px) {
+  .app-shell--playing > main, .app-shell--setup > main { padding:2px 0; }
+  .app-shell--playing .cpu-banner, .app-shell--setup .cpu-banner { display:flex; align-items:center; gap:12px; padding:3px 10px; margin-bottom:2px; }
+  .app-shell--playing .cpu-banner p, .app-shell--setup .cpu-banner p { margin:0; }
+  .app-shell--playing .save-toolbar { flex-basis:34px; margin:0; }
+  .app-shell--playing .save-toolbar .secondary { min-height:32px; padding:3px 12px; }
+  .app-shell--playing .latest-event { display:flex; align-items:center; gap:8px; margin:1px 0; padding:3px 8px; }
+  .app-shell--playing .latest-event span { display:inline; }
+  .battlefield-stage { height:auto; flex:1; }
+}
+@media (min-width:1400px) and (min-height:850px) {
+  .play-layout.triple-layout, .setup-layout.triple-layout { grid-template-columns:minmax(210px,.5fr) minmax(0,3fr) minmax(210px,.5fr); gap:8px; }
+  .setup-screen--3d .setup-main { width:100%; max-width:none; }
+  .rule-reference { padding:6px; font-size:11px; }
+  .matchup-row { grid-template-columns:3.4em minmax(0,1fr); font-size:10px; }
+}
+@media (max-width:600px) {
+  .battlefield-stage { height:520px; }
+  .battlefield-cameras button { min-height:40px; }
+  .battlefield-hq { inset:5px 5px auto; }
+  .battlefield-hq span { padding:3px 6px; }
+  .app-shell--setup > header, .app-shell--playing > header { padding:8px 0; gap:6px; }
+  .app-shell--setup > main, .app-shell--playing > main { padding:8px 0; }
+  .app-shell--setup .cpu-banner, .app-shell--playing .cpu-banner { padding:6px 8px; margin-bottom:8px; font-size:12px; line-height:1.4; }
+  .app-shell--setup .section-heading h2, .app-shell--playing .section-heading h2 { margin-bottom:4px; font-size:20px; }
+  .setup-screen--3d .setup-main > .muted { margin:4px 0; font-size:12px; }
+  .setup-screen--3d .setup-progress { margin:4px 0; padding:6px 8px; font-size:12px; }
+  .app-shell--playing .latest-event { padding:6px 8px; margin:6px 0; font-size:12px; }
+  .app-shell--playing .save-toolbar { margin-bottom:6px; }
+}

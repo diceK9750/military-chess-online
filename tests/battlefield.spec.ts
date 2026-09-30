@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { sitePoint } from '../src/battlefield3d/state';
+import { fullCameraDistance } from '../src/battlefield3d/camera';
 import type { Site } from '../src/game/types';
 
 test.use({ launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } });
@@ -52,10 +53,10 @@ async function point(page: Page, site: Site, height = 0.31, preset: 'full' | 'to
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
   const camera = new PerspectiveCamera(42, box.width / box.height, 0.1, 100);
-  const distance = Math.min(30, Math.max(13, 11 / camera.aspect));
-  if (preset === 'top') camera.position.set(0, Math.min(34, Math.max(13, 10 / camera.aspect)), .001);
-  else camera.position.set(0, distance * .78, distance * .7);
-  camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  const distance = fullCameraDistance(camera.aspect, preset === 'top');
+  if (preset === 'top') camera.position.set(0, distance, .001);
+  else camera.position.set(0, distance * .86, distance * .6);
+  camera.lookAt(0, .25, 0); camera.updateMatrixWorld();
   const world = sitePoint(site), position = new Vector3(world.x, height, world.z).project(camera);
   return { x: box.x + (position.x + 1) * box.width / 2, y: box.y + (1 - position.y) * box.height / 2 };
 }
@@ -148,9 +149,9 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await synchronized(page);
     const before = Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''));
     const target = await choose3d(page, !!isMobile);
-    await expect(page.locator('.battlefield-selection')).toContainText('を選択中');
+    await expect(page.locator('.battlefield-selection')).toContainText('移動可能');
     await tap(page, target, !!isMobile);
-    await expect(page.locator('.battlefield-selection')).toContainText(target + 'へ移動予定');
+    await expect(page.locator('.battlefield-selection')).toContainText(`→ ${target}・確定待ち`);
     expect(Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before);
     await tap(page, target, !!isMobile);
     await expect.poll(async () => Number((await page.locator('.badge').first().textContent())!.replace(/\D/g, ''))).toBe(before + 2);
@@ -215,10 +216,11 @@ test('camera drag cannot select or commit; reset and repeated mounts release Web
   await expect(canvas).toBeVisible();
   await page.waitForTimeout(350);
   const count = await page.locator('.badge').first().textContent();
-  const position = await point(page, 'B4');
+  const area = (await canvas.boundingBox())!;
+  const position = { x: area.x + 15, y: area.y + area.height * .6 };
   await page.mouse.move(position.x, position.y); await page.mouse.down();
   await page.mouse.move(position.x + 80, position.y + 30, { steps: 8 }); await page.mouse.up();
-  await expect(page.locator('.battlefield-selection')).toHaveText('青＝自軍 / 赤＝敵軍');
+  await expect(page.locator('.battlefield-selection')).toContainText('青＝自軍 / 赤＝敵軍');
   expect(await page.locator('.badge').first().textContent()).toBe(count);
   await page.getByRole('button', { name: '視点を戻す' }).click();
   for (let i = 0; i < 3; i++) {
@@ -279,7 +281,8 @@ test('3D setup presets, drag and zoom never change placement; top-down picking s
   await page.screenshot({ path: info.outputPath('setup-front.png') });
   await page.getByRole('button', { name: '選択を解除', exact: true }).click();
   await page.getByRole('button', { name: '全景', exact: true }).click();
-  const position = await point(page, 'B1');
+  const cameraArea = (await canvas.boundingBox())!;
+  const position = { x: cameraArea.x + 15, y: cameraArea.y + cameraArea.height * .6 };
   await page.mouse.move(position.x, position.y); await page.mouse.down();
   await page.mouse.move(position.x + 70, position.y + 25, { steps: 8 }); await page.mouse.up();
   await expect(page.locator('.selection-panel')).toHaveCount(0);

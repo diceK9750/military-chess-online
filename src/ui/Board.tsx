@@ -16,13 +16,13 @@ export function Board({ pieces, perspective, selected, pendingSite, targets = []
         const marker = site === battleSite ? '戦' : site === lastMove?.to ? '着' : site === lastMove?.from ? '発' : null;
         const onRoute = routeLane && site.startsWith(routeLane) && /^[2-7]$/.test(site.slice(1));
         const entrance = ['B4', 'B5', 'E4', 'E5'].includes(site);
-        const description = [isHQ(site) ? '司令部' : null, entrance ? '突破口入口' : null, pendingSite === site ? '着手予定地点' : targets.includes(site) ? '選択できる地点' : null, marker === '戦' ? '直前の戦闘地点' : marker === '発' ? '直前の出発地点' : marker === '着' ? '直前の到着地点' : null].filter(Boolean).join('、');
+        const description = [isHQ(site) ? humanSide ? site === `HQ-P${humanSide}` ? '自軍本陣' : '敵軍本陣' : '司令部' : null, entrance ? '突破口入口' : null, pendingSite === site ? '着手予定地点' : targets.includes(site) ? '選択できる地点' : null, marker === '戦' ? '直前の戦闘地点' : marker === '発' ? '直前の出発地点' : marker === '着' ? '直前の到着地点' : null].filter(Boolean).join('、');
         return <button key={site} type="button" data-site={site} aria-label={`${site} ${label}`} aria-description={description || undefined} aria-pressed={selected === site}
           disabled={disabled}
           className={`cell ${isHQ(site) ? 'hq' : ''} ${piece ? `side-${piece.owner}` : 'empty'} ${targets.includes(site) ? 'legal' : ''} ${selected === site ? 'selected' : ''} ${pendingSite === site ? 'pending' : ''} ${entrance ? 'entrance' : ''} ${index === 3 && entrance ? 'gate' : ''} ${lastMove?.from === site ? 'last-from' : ''} ${lastMove?.to === site ? 'last-to' : ''} ${battleSite === site ? 'last-battle' : ''} ${onRoute ? 'route' : ''}`}
           onClick={() => onSelect(site)}>
           <span className="coordinate">{site}</span>
-          <span className="piece-label">{piece ? hidden ? '？' : <PieceFace type={piece.type} /> : targets.includes(site) ? '●' : isHQ(site) ? '司令部' : '·'}</span>
+          <span className="piece-label">{piece ? hidden ? isHQ(site) ? '敵駒' : '？' : <PieceFace type={piece.type} /> : targets.includes(site) ? '●' : isHQ(site) ? '司令部' : '·'}</span>
           <span className="owner-label">{piece ? humanSide ? piece.owner === humanSide ? '自軍' : '敵軍' : `P${piece.owner}` : isHQ(site) ? '司令部' : entrance ? '突破口' : '\u00a0'}</span>
           {marker && <span className="cell-marker" aria-hidden="true">{marker}</span>}
         </button>;

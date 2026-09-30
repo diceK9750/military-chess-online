@@ -103,6 +103,41 @@ test('3D selection and destination use the same confirm button', async () => {
   fireEvent.click(screen.getByRole('button', { name: '確定して実行' }));
   expect(changed).toHaveBeenCalledTimes(1);
 });
+
+test('drag and retap share official validation and reject duplicate or illegal drops', async () => {
+  const changed=vi.fn();
+  render(<LocalGame initial={scenario('highFlight')} onChange={changed}/>);
+  await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+  act(()=>input().onDragStart?.('D5'));
+  expect(latest().interaction.selectedSite).toBe('D5');
+  act(()=>input().onPieceDrop?.('D5','A2'));
+  expect(changed).not.toHaveBeenCalled();
+  expect(latest().pieces).toContainEqual({owner:1,position:'D5',unknown:false,type:'aircraft'});
+  act(()=>{input().onPieceDrop?.('D5','HQ-P2');input().onPieceDrop?.('D5','HQ-P2');});
+  expect(changed).toHaveBeenCalledOnce();
+  expect(changed.mock.calls[0][0].events.at(-1).move).toEqual({from:'D5',to:'HQ-P2'});
+});
+test.each(['C','D'] as const)('HQ drag uses official %s lane and preserves secrecy',async column=>{
+  const changed=vi.fn();render(<LocalGame initial={scenario('aircraft')} onChange={changed}/>);
+  await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+  act(()=>input().onDragStart?.('HQ-P1'));
+  act(()=>input().onPieceDrop?.('HQ-P1','HQ-P2',column));
+  expect(changed).toHaveBeenCalledOnce();expect(changed.mock.calls[0][0].events.at(-1).move.lane).toBe(column);
+});
+test('ambiguous HQ drop waits for the same lane selection and confirmation',async()=>{
+  const changed=vi.fn();render(<LocalGame initial={scenario('aircraft')} onChange={changed}/>);
+  await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+  act(()=>input().onPieceDrop?.('HQ-P1','HQ-P2'));
+  expect(changed).not.toHaveBeenCalled();expect(screen.getByRole('button',{name:'確定して実行'})).toBeDisabled();
+  act(()=>input().onLaneSelect('C'));fireEvent.click(screen.getByRole('button',{name:'確定して実行'}));expect(changed).toHaveBeenCalledOnce();
+});
+test('animation, CPU turn and terminal state block drag callbacks as well as click',async()=>{
+  const changed=vi.fn(),view=render(<LocalGame initial={scenario('highFlight')} onChange={changed}/>);
+  await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+  act(()=>input().onAnimationChange?.(true));act(()=>{input().onDragStart?.('D5');input().onPieceDrop?.('D5','HQ-P2');});expect(changed).not.toHaveBeenCalled();
+  view.unmount();render(<LocalGame initial={{...scenario('highFlight'),result:{winner:1,reason:'HQ_CAPTURE'},turn:null}} onChange={changed}/>);
+  await waitFor(()=>expect(mock.create).toHaveBeenCalledTimes(2));act(()=>input().onPieceDrop?.('D5','HQ-P2'));expect(changed).not.toHaveBeenCalled();
+});
 test('HQ lane selection is shared, required, and recorded in MOVE', async () => {
   const changed = vi.fn();
   render(<LocalGame initial={scenario('aircraft')} onChange={changed} />);
@@ -135,6 +170,8 @@ test('illegal enemy selection, CPU turn and finished game cannot execute', async
   await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(3));
   expect(latest().interaction.interactionEnabled).toBe(false);
   act(() => input().onSiteSelect('D5'));
+  expect(changed).not.toHaveBeenCalled();
+  act(() => { input().onDragStart?.('D5'); input().onPieceDrop?.('D5','HQ-P2'); });
   expect(changed).not.toHaveBeenCalled();
 });
 

@@ -229,7 +229,10 @@ for (const difficulty of ['かんたん', 'ふつう'] as const) test(`CPU ${dif
   const opponentCount = await opponent.count();
   expect(opponentCount).toBeGreaterThanOrEqual(22); // CPU may have moved and fought when chosen to play first.
   expect(opponentCount).toBeLessThanOrEqual(23);
-  expect(await opponent.locator('.piece-label').allTextContents()).toEqual(Array(opponentCount).fill('？'));
+  for (const cell of await opponent.all()) {
+    const site=await cell.getAttribute('data-site');
+    await expect(cell.locator('.piece-label')).toHaveText(site?.startsWith('HQ')?'敵駒':'？');
+  }
   expect(await opponent.locator('.piece-face').count()).toBe(0);
   expect(await page.locator('.cell.side-1 .piece-face').count()).toBeGreaterThan(0);
   const own = page.locator('.cell.side-1');

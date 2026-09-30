@@ -28,6 +28,8 @@ export interface BattlefieldInteraction {
 export interface BattlefieldHandlers {
   onSiteSelect(site: Site): void;
   onLaneSelect(lane: 'C' | 'D'): void;
+  onDragStart?(site: Site): void;
+  onPieceDrop?(from: Site, to: Site, lane?: 'C' | 'D'): void;
   onAnimationChange?(active: boolean): void;
 }
 export type CameraPreset = 'full' | 'top' | 'front' | 'selected';

@@ -327,7 +327,8 @@ test('CPU match shows own icon and name without adding an enemy icon or name', a
   expect(own.querySelector('.piece-icon')).toHaveTextContent('✈️');
   expect(own.querySelector('.piece-name')).toHaveTextContent('飛行機');
   const enemy = screen.getByRole('button', { name: 'HQ-P2 P2 不明駒' });
-  expect(enemy.querySelector('.piece-label')).toHaveTextContent('？');
+  expect(enemy.querySelector('.piece-label')).toHaveTextContent('敵駒');
+  expect(enemy).toHaveAttribute('aria-description','敵軍本陣');
   expect(enemy.querySelector('.piece-face')).toBeNull();
   expect(container.querySelector('.board')).not.toHaveTextContent('工兵');
   expect(container.querySelector('.board')).not.toHaveTextContent('🔧');
