@@ -50,15 +50,26 @@ async function clickSite(page:Page,site:Site) {
 
 test('live human victory celebrates once, actions remain usable and replay preserves save',async({page},info)=>{
   await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
+  await page.addInitScript(()=>{Object.assign(window,{victoryTones:0,victoryDucks:0});const native=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(){(window as unknown as {victoryTones:number}).victoryTones++;return native.call(this);};window.addEventListener('military-chess:celebration-audio',()=>{(window as unknown as {victoryDucks:number}).victoryDucks++;});});
   await prepare(page,beforeVictory);
+  await page.getByRole('button',{name:'効果音 ONにする'}).click();await page.getByRole('button',{name:'BGM ONにする'}).click();await expect(page.getByRole('button',{name:'BGM OFFにする'})).toBeVisible();
   await clickSite(page,last.move.from);await clickSite(page,last.move.to);
   await page.getByRole('button',{name:'確定して実行'}).click();
   const result=page.getByRole('status',{name:'対局結果'});
   await expect(result).toContainText('あなたの勝利');await expect(result).toHaveClass(/result-victory/);await expect(result).toBeInViewport({ratio:1});
   await expect(page.locator('.victory-celebration')).toHaveAttribute('data-active','true');
   expect(await page.locator('.victory-celebration').evaluate(e=>getComputedStyle(e).pointerEvents)).toBe('none');
+  expect(await page.evaluate(()=>(window as unknown as {victoryDucks:number}).victoryDucks)).toBe(1);
+  expect(await page.evaluate(()=>(window as unknown as {victoryTones:number}).victoryTones)).toBeGreaterThanOrEqual(7);
+  expect(await page.locator('audio').evaluate(e=>(e as HTMLAudioElement).volume)).toBe(.0625);
+  await expect(page.locator('.victory-celebration')).toHaveAttribute('data-fresh','true');
+  expect(await page.locator('.victory-celebration .petal').count()).toBeGreaterThan(10);
+  await expect(page.locator('.salute-cannon')).toHaveCount(info.project.name==='mobile'?2:4);
+  await expect(page.locator('canvas')).toHaveAttribute('data-ceremony','decisive-replay');
+  await page.waitForTimeout(1300);
   await page.screenshot({path:info.outputPath('victory.png'),fullPage:true});
   await expect(page.locator('.victory-celebration i')).toHaveCount(0,{timeout:6000});
+  expect(await page.locator('audio').evaluate(e=>(e as HTMLAudioElement).volume)).toBe(.25);
   const saved=await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY);
   expect(JSON.parse(saved!).game).toEqual(victory.game);
   await result.getByRole('button',{name:'戦史再現'}).click();
@@ -72,13 +83,16 @@ test('live human victory celebrates once, actions remain usable and replay prese
     await expect(page.getByRole('status',{name:'戦史解説'})).toContainText(story.scenes[chapter.index].text);
   }
   await expect(page.getByRole('status',{name:'戦史解説'})).toContainText('自軍の勝利');
+  await page.locator('canvas').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  await page.locator('canvas').screenshot({path:info.outputPath('movie-hq-capture.png')});
   await page.getByRole('button',{name:'最初から再生'}).click();
   await expect(page.getByRole('button',{name:'一時停止'})).toBeVisible();await page.getByRole('button',{name:'一時停止'}).click();
   await page.screenshot({path:info.outputPath('theater.png'),fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.getByRole('button',{name:'結果画面へ戻る'}).click();
   expect(await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY)).toBe(saved);
-  await page.reload();await page.getByRole('button',{name:/続きから/}).click();await expect(result).toContainText('あなたの勝利');
+  await page.reload();await page.getByRole('button',{name:/続きから/}).click();await expect(result).toContainText('あなたの勝利');await expect(page.locator('.victory-celebration')).toHaveAttribute('data-fresh','false');await expect(page.locator('.salute-cannon')).toHaveCount(0);
 });
 for(const [label,match,style] of [['敗北',defeat,'defeat'],['引き分け',draw,'draw']] as const)test(`${label} is distinct, not celebrated, and explained in final replay`,async({page},info)=>{
   await prepare(page,match);const result=page.getByRole('status',{name:'対局結果'});

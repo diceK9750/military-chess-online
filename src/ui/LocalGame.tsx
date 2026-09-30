@@ -13,7 +13,8 @@ import { Intelligence, readIntelligence, INTELLIGENCE_KEY } from './Intelligence
 import { tacticalView, recommendations } from '../intelligence/public';
 import { inferEnemies } from '../intelligence/inference';
 import { Chronicle } from './Chronicle';
-import { playCue } from './sound';
+import { CommandDeck } from './CommandDeck';
+import { playCue, playVictory } from './sound';
 
 const reasons: Record<EndReason, string> = { HQ_CAPTURE: '敵司令部を占領', CAPTURERS_ELIMINATED: '片側の占領可能駒が全滅', BOTH_CAPTURERS_ELIMINATED: '双方の占領可能駒が全滅', NO_LEGAL_MOVES_BOTH: '双方に合法手なし', FIFTY_NONCOMBAT_MOVES: '戦闘なし50手' };
 function reasonText(result: Result, mode: 'debug' | 'cpu'): string {
@@ -50,18 +51,20 @@ function battleDisclosures(events: readonly GameEvent[], initialPieces: readonly
   return lines;
 }
 
-export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'easy', cpuSeed = 0, initialPlacements, onNewGame, onSave }: {
+export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'easy', cpuSeed = 0, initialPlacements, onNewGame, onSave, onTitle }: {
   initial: GameState; onChange?(game: GameState): void; mode?: 'debug' | 'cpu'; difficulty?: Difficulty; cpuSeed?: number;
-  initialPlacements?: { readonly p1: readonly Piece[]; readonly p2: readonly Piece[] }; onNewGame?(): void; onSave?(): void;
+  initialPlacements?: { readonly p1: readonly Piece[]; readonly p2: readonly Piece[] }; onNewGame?(): void; onSave?(): void; onTitle?(): void;
 }) {
   const [game, setGame] = useState(initial);
   const [fallback, setFallback] = useState(false);
   const [intelligence, setIntelligence] = useState(readIntelligence);
   const [analysisSite, setAnalysisSite] = useState<Site|null>(null);
   const [replaying,setReplaying]=useState(false);
+  const [celebrated,setCelebrated]=useState(false);
+  const openedFinished=useRef(initial.result!==null);
   const [guide,setGuide]=useState(()=>{try{return localStorage.getItem('military-chess-guide-v1')!=='done';}catch{return true;}});
   const heardMove=useRef(initial.moveCount);
-  useEffect(()=>{if(game.moveCount===heardMove.current)return;heardMove.current=game.moveCount;const last=[...game.events].reverse().find(e=>e.kind==='MOVE');playCue(game.result?'end':last?.kind==='MOVE'&&last.battle?'battle':'move');},[game]);
+  useEffect(()=>{if(game.moveCount===heardMove.current)return;heardMove.current=game.moveCount;const last=[...game.events].reverse().find(e=>e.kind==='MOVE');if(game.result?.winner===1&&mode==='cpu')playVictory();else playCue(game.result?'end':last?.kind==='MOVE'&&last.battle?'battle':'move');},[game,mode]);
   useEffect(()=>{if(game.moveCount>0){setGuide(false);try{localStorage.setItem('military-chess-guide-v1','done');}catch{/* Optional. */}}},[game.moveCount]);
   const [animating, setAnimating] = useState(false);
   const animationBusy = useRef(false);
@@ -138,14 +141,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     interactionEnabled: !cpuThinking && !game.result,
   }, mode==='cpu'&&intelligence&&!game.result ? {routes:recommendations(publicView).map(r=>r.move),hypotheses:hypotheses.map(h=>({position:h.position,count:h.candidates.length})),focusSite:analysisSite} : undefined, initialPlacements ? [...initialPlacements.p1, ...initialPlacements.p2] : []), [game, mode, perspective, selected, pending, lane, cpuThinking, intelligence, publicView, hypotheses, analysisSite, initialPlacements]);
   const resultLabel = game.result ? game.result.winner ? mode === 'cpu' ? game.result.winner === 1 ? 'あなたの勝利' : 'あなたの敗北' : `P${game.result.winner}の勝利` : '引き分け' : null;
-  if(game.result&&replaying&&initialPlacements)return <Chronicle game={game} initial={initialPlacements} onClose={()=>setReplaying(false)}/>;
-  return <section className="game-screen">
-    <div className="section-heading"><div><p className="eyebrow">02 / {mode === 'cpu' ? '対CPU戦' : '開発用対局'}</p><h2>{game.result ? '対局終了' : cpuThinking ? 'CPUの手番' : mode === 'cpu' ? 'あなたの手番' : `P${game.turn}の手番`}</h2></div><span className="badge">{game.moveCount}手</span></div>
-    {cpuThinking && <p className="thinking" role="status">コンピューターが考えています。盤面は着手後に操作できます。</p>}
-    {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
-    {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
-    <div className="triple-layout play-layout"><RuleReference side="left" /><div className={"game-surfaces" + (fallback ? " has-fallback" : "")}>
-<BattlefieldView state={battlefieldState} endgame={game.result ? { label: resultLabel!, reason: reasonText(game.result, mode), onNew: mode === 'cpu' ? onNewGame : undefined, onReplay: mode === 'cpu' && initialPlacements ? () => setReplaying(true) : undefined, onSave } : undefined} onDragStart={dragStart} onPieceDrop={drop} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
+  const commands = <CommandDeck><div className="actions command-utilities">{onSave && <button onClick={onSave}>対局を保存</button>}{onTitle && <button onClick={onTitle}>タイトルへ</button>}<button onClick={() => document.getElementById('audio-controls')?.scrollIntoView({block:'nearest'})}>音の設定</button></div>
     {mode==='cpu'&&<Intelligence view={publicView} enabled={intelligence} hypotheses={hypotheses} focus={analysisSite} onFocus={setAnalysisSite} onToggle={()=>{playCue('analysis');setIntelligence(value=>{const next=!value;try{localStorage.setItem(INTELLIGENCE_KEY,String(next));}catch{/* Optional preference only. */}return next;});}} />}
     {mode==='cpu'&&guide&&!game.result&&<small className="first-guide">自軍→金枠→再タップ、または駒をドラッグ。視点はボタンで切り替え。</small>}
 <div className="play-main">
@@ -163,7 +159,18 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     </div> : !game.result && <div className="move-prompt"><p className="notice" role="status">{cpuThinking ? 'コンピューターが考えています。' : notice || (selectedPiece ? `${PIECES[selectedPiece.type].label}（${selected}）を選択中。金枠の移動先を選んでください。` : '自分の駒を選ぶと、移動できる地点を金枠で表示します。')}</p>{selected && !cpuThinking && <button className="secondary" disabled={animating || cpuThinking} onClick={cancel}>選択を解除</button>}</div>}
     {!fallback && selected && !pending.length && <details className="destination-list"><summary>移動先一覧（{new Set(targets).size}地点）</summary><div className="actions">{[...new Set(targets)].map(site => <button key={site} data-target={site} disabled={animating || cpuThinking} onClick={() => select(site)}>{site}</button>)}</div></details>}
     {error && <p role="alert">{error}</p>}
-    </div></div><RuleReference side="right" /></div>
+
+    </div>
+  </CommandDeck>;
+  if(game.result&&replaying&&initialPlacements)return <Chronicle onSave={onSave} onTitle={onTitle} game={game} initial={initialPlacements} onClose={()=>setReplaying(false)}/>;
+  return <section className="game-screen">
+    <div className="section-heading"><div><p className="eyebrow">02 / {mode === 'cpu' ? '対CPU戦' : '開発用対局'}</p><h2>{game.result ? '対局終了' : cpuThinking ? 'CPUの手番' : mode === 'cpu' ? 'あなたの手番' : `P${game.turn}の手番`}</h2></div><span className="badge">{game.moveCount}手</span></div>
+    {cpuThinking && <p className="thinking" role="status">コンピューターが考えています。盤面は着手後に操作できます。</p>}
+    {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
+    {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
+    <div className="triple-layout play-layout"><RuleReference side="left" /><div className={"game-surfaces" + (fallback ? " has-fallback" : "")}>
+<BattlefieldView commands={commands} state={battlefieldState} endgame={game.result ? { fresh: !openedFinished.current&&!celebrated, label: resultLabel!, reason: reasonText(game.result, mode), onNew: mode === 'cpu' ? onNewGame : undefined, onReplay: mode === 'cpu' && initialPlacements ? () => {setCelebrated(true);setReplaying(true);} : undefined, onSave } : undefined} onDragStart={dragStart} onPieceDrop={drop} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
+    </div><RuleReference side="right" /></div>
     <details className="history" aria-label="対局履歴"><summary>対局履歴（{game.events.length}件）</summary><ol>{game.events.map((event, index) => <li key={index}>{eventText(event, mode)}</li>)}</ol>{!game.events.length && <p>検証用の盤面です。駒を選んで開始できます。</p>}</details>
     {game.result && mode === 'cpu' && initialPlacements && <details className="postgame"><summary>終局後の全駒・初期配置・戦闘を確認</summary><p>この対局は終了したため、両軍の情報を表示します。</p>{([1, 2] as const).map(side => <div key={side}><h3>{side === 1 ? 'あなた' : 'コンピューター'}の初期配置</h3><ul>{initialPlacements[side === 1 ? 'p1' : 'p2'].map(piece => <li key={piece.id}>{piece.position}：{PIECES[piece.type].label}</li>)}</ul></div>)}<h3>戦闘の双方の駒種類</h3><ol>{battleDisclosures(game.events, [...initialPlacements.p1, ...initialPlacements.p2]).map((line, index) => <li key={index}>{line}</li>)}</ol><p>全着手は上の対局履歴で確認できます。</p></details>}
   </section>;

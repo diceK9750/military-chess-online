@@ -1,5 +1,6 @@
 import { SITES, anchors } from '../game/board';
 import type { GameState, Move, Outcome, Piece, PieceType, Player, Result, Site } from '../game/types';
+import type { Quality } from './settings';
 
 export type BattlefieldPiece = { readonly owner: Player; readonly position: Site } & (
   { readonly unknown: true } | { readonly unknown: false; readonly type: PieceType }
@@ -8,6 +9,10 @@ export interface BattlefieldViewState {
   readonly battleOutcome?: Outcome;
   readonly analysis?: BattlefieldAnalysis;
   readonly phase?: 'setup' | 'replay';
+  readonly quality?: Quality;
+  readonly overlay?: boolean;
+  readonly freshVictory?: boolean;
+  readonly cinematic?: { readonly shot: 'opening'|'march'|'battle'|'breach'|'pressure'|'decisive'|'summary'; readonly speed: number; readonly playing: boolean; readonly title: string; readonly ending: boolean };
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;

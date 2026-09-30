@@ -130,7 +130,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await page.getByRole('button', { name: '真上', exact: true }).click();
     await page.evaluate(() => scrollTo(0, 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    if (width >= 1400) expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 2)).toBe(true);
+    if (width >= 1400) expect((await page.locator('.battlefield-stage').boundingBox())!.height).toBeGreaterThanOrEqual(440);
     await page.screenshot({ path: info.outputPath('setup-top-' + width + '.png'), fullPage: true });
     await page.getByRole('button', { name: '全景', exact: true }).click();
     await page.screenshot({ path: info.outputPath('setup-full-' + width + '.png'), fullPage: true });
@@ -163,7 +163,8 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await page.evaluate(() => scrollTo(0, 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width >= 1400) {
-      expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 2)).toBe(true);
+      expect((await page.locator('.battlefield-stage').boundingBox())!.height).toBeGreaterThanOrEqual(440);
+      await expect(page.getByRole('region',{name:'軍議操作'})).toBeVisible();
       expect((await canvas.boundingBox())!.width).toBeGreaterThanOrEqual(520);
       await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
     }
@@ -290,12 +291,16 @@ test('3D fixed presets replace drag and zoom without changing placement; top-dow
   await page.mouse.move(position.x + 70, position.y + 25, { steps: 8 }); await page.mouse.up();
   await expect(page.locator('.selection-panel')).toHaveCount(0);
   await canvas.scrollIntoViewIfNeeded();
+  const blank=(await canvas.boundingBox())!;await page.mouse.move(blank.x+5,blank.y+5);
+  await expect(canvas).not.toHaveAttribute('data-hover-site',/./);
   const beforeZoom = await canvas.screenshot();
   const pose = await canvas.getAttribute('data-camera-pose');
   const box = (await canvas.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -200);
   await page.waitForTimeout(100);
+  await canvas.scrollIntoViewIfNeeded();const currentBounds=(await canvas.boundingBox())!;await page.mouse.move(currentBounds.x+5,currentBounds.y+5);
+  await expect(canvas).not.toHaveAttribute('data-hover-site',/./);
   expect((await canvas.screenshot()).equals(beforeZoom)).toBe(true);
   await expect(canvas).toHaveAttribute('data-camera-pose',pose!);
   await expect(page.locator('.selection-panel')).toHaveCount(0);

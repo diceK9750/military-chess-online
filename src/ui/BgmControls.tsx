@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AUDIO_DUCK_EVENT } from './sound';
 export const AUDIO_SETTINGS_KEY = 'military-chess-audio-v1';
 type Settings = { enabled: boolean; volume: number };
 function readSettings(): Settings {
@@ -15,10 +16,18 @@ export function BgmControls() {
   const [error, setError] = useState('');
   const audio = useRef<HTMLAudioElement>(null);
   const request = useRef(0);
+  const volume=useRef(settings.volume),ducked=useRef(false);
+  volume.current=settings.volume;
   useEffect(() => {
     try { localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(settings)); } catch { /* Optional preference storage. */ }
-    if (audio.current) audio.current.volume = settings.volume;
+    if (audio.current) audio.current.volume = settings.volume*(ducked.current?.25:1);
   }, [settings]);
+  useEffect(()=>{
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    const duck=()=>{ducked.current=true;if(audio.current)audio.current.volume=volume.current*.25;clearTimeout(timer);timer=setTimeout(()=>{ducked.current=false;if(audio.current)audio.current.volume=volume.current;},2600);};
+    window.addEventListener(AUDIO_DUCK_EVENT,duck);
+    return()=>{window.removeEventListener(AUDIO_DUCK_EVENT,duck);clearTimeout(timer);ducked.current=false;};
+  },[]);
   useEffect(() => {
     const element = audio.current;
     return () => { request.current++; element?.pause(); };

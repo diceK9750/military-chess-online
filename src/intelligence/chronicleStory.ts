@@ -21,6 +21,7 @@ export function chronicleStory(frames: readonly GameState[]): { readonly scenes:
   let contact = false, breakthrough = false, pressure = false, loss = false;
   const chapters: ChronicleChapter[] = [{ index: 0, title: '開戦' }];
   for (let index = 1; index < frames.length; index++) {
+    if(index===1)chapters.push({index,title:'序盤'});
     const frame = frames[index], previous = frames[index - 1];
     const event = [...frame.events].reverse().find(e => e.kind === 'MOVE');
     if (!event || event.kind !== 'MOVE') throw new RuleError('REPLAY_MISMATCH');
@@ -58,7 +59,8 @@ export function chronicleStory(frames: readonly GameState[]): { readonly scenes:
       title = result.winner === null ? '終局 — 戦いの総括' : '決定打 — 戦いの総括';
       kinds.push(...(result.winner === null ? [] : ['decisive' as const]), 'summary');
       text.push(`${reasons[result.reason]}により${label}。全${frame.moveCount}手、戦闘${frame.events.filter(e => e.kind === 'MOVE' && e.battle).length}回の対局でした。`);
-      chapters.push({ index, title: result.winner === null ? '終局・総括' : '決定打・総括' });
+      if(result.winner!==null)chapters.push({index,title:'決定打'});
+      chapters.push({index,title:'終局'});
     }
     scenes.push({ title, text: text.join(' '), move: moveText, kinds });
   }

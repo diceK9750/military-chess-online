@@ -99,7 +99,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await expect(canvas).toHaveAttribute('data-battle-effect', /ATTACKER|DEFENDER|MUTUAL/);
     await expect(canvas).toHaveAttribute('data-camera-director', 'manual');
     await page.screenshot({ path: info.outputPath(`battle-${width}.png`), fullPage: true });
-    await page.clock.runFor(850);
+    await page.clock.runFor(2600);
     await expect(canvas).not.toHaveAttribute('data-battle-effect', /./);
     await seek(page, 12);
     await page.clock.runFor(850);

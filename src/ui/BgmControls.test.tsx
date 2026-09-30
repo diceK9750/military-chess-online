@@ -45,3 +45,14 @@ test('pending playback completion after unmount cannot start a stale session', a
   await act(async () => resolve());
   expect(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)!).enabled).toBe(false);
 });
+
+test('ceremony ducks the existing BGM transiently and restores the latest user volume',()=>{
+ vi.useFakeTimers();
+ const view=render(<BgmControls/>),audio=view.container.querySelector('audio')!;
+ act(()=>window.dispatchEvent(new Event('military-chess:celebration-audio')));
+ expect(audio.volume).toBe(.25*.25);
+ fireEvent.change(screen.getByRole('slider'),{target:{value:'60'}});expect(audio.volume).toBe(.6*.25);
+ act(()=>vi.advanceTimersByTime(2600));expect(audio.volume).toBe(.6);
+ expect(JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)!).volume).toBe(.6);
+ view.unmount();vi.useRealTimers();
+});

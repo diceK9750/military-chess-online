@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests', fullyParallel: true,
+  // Software 3D rendering and PNG capture share CPU/memory; keep CI bounded.
+  workers: 4,
   use: { baseURL: 'http://127.0.0.1:5173', trace: 'retain-on-failure' },
   projects: [
     { name: 'mobile', use: { ...devices['Pixel 7'], browserName: 'chromium' } },

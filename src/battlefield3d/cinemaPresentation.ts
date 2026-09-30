@@ -1,0 +1,4 @@
+import type {ChronicleScene} from '../intelligence/chronicleStory';
+export const cinemaTiming=(speed:number,battle:boolean,decisive=false)=>({march:Math.max(decisive?1200:600,1200/speed),clash:battle?Math.max(750,Math.min(1500,1000/speed)):0,exit:battle?300:0});
+export function cinemaShot(scene:ChronicleScene,index:number){return index===0?'opening' as const:scene.kinds.includes('decisive')?'decisive' as const:scene.kinds.includes('summary')?'summary' as const:scene.kinds.includes('pressure')?'pressure' as const:scene.kinds.includes('breakthrough')?'breach' as const:scene.kinds.includes('contact')||scene.kinds.includes('loss')?'battle' as const:'march' as const;}
+export function cinemaDelay(scene:ChronicleScene,speed:number,hasMove:boolean,battle:boolean){const t=cinemaTiming(speed,battle,scene.kinds.includes('decisive'));return Math.max(hasMove?t.march+t.clash+t.exit+100:1000/speed,scene.kinds.some(k=>k!=='opening')?2500/speed:0);}

@@ -13,6 +13,7 @@ import type { GameState } from '../game/types';
 
 const mock = vi.hoisted(() => ({ create: vi.fn(), reset: vi.fn(), dispose: vi.fn(), update: vi.fn() }));
 vi.mock('./renderer', () => ({ createBattlefield: mock.create }));
+vi.mock('./cinematicRenderer', () => ({createBattlefield:mock.create}));
 beforeEach(() => {
   vi.clearAllMocks();
   mock.create.mockImplementation(() => ({ reset: mock.reset, dispose: mock.dispose, update: mock.update }));
@@ -41,7 +42,8 @@ test('receives safe live updates without creating a second renderer', async () =
   await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(1));
   const next = { ...state(), moveCount: 4 };
   view.rerender(<BattlefieldView state={next} {...handlers} />);
-  expect(mock.update).toHaveBeenLastCalledWith(next);
+  expect(mock.update).toHaveBeenLastCalledWith(expect.objectContaining(next));
+  expect(latest().quality).toMatch(/light|standard|high/);
   expect(mock.create).toHaveBeenCalledTimes(1);
 });
 test('unsupported rendering and context loss preserve the surrounding game', async () => {
@@ -261,4 +263,13 @@ test.each([
   expect(latest().interaction.interactionEnabled).toBe(false);
   act(() => input().onPieceDrop?.('D5', 'HQ-P2'));
   expect(latest().moveCount).toBe(0);
+});
+
+test('a live victory remains fresh when parent autosave updates initial; resumed terminal is shortened',async()=>{
+ function Parent(){const [game,setGame]=useState(scenario('capture'));return <LocalGame initial={game} mode="cpu" onChange={setGame}/>;}
+ const view=render(<Parent/>);await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+ act(()=>input().onSiteSelect('C7'));act(()=>input().onSiteSelect('HQ-P2'));act(()=>input().onSiteSelect('HQ-P2'));
+ expect(latest().finished).toBe(true);expect(latest().freshVictory).toBe(true);view.unmount();
+ render(<LocalGame initial={{...scenario('capture'),result:{winner:1,reason:'HQ_CAPTURE'},turn:null}} mode="cpu"/>);
+ await waitFor(()=>expect(mock.create).toHaveBeenCalledTimes(2));expect(latest().freshVictory).toBe(false);
 });

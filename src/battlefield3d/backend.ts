@@ -5,6 +5,7 @@ export interface RenderEngine {
   setPixelRatio(ratio: number): void;
   setSize(width: number, height: number, updateStyle?: boolean): void;
   render(scene: Object3D, camera: Camera): void;
+  renderAsync?(scene: Object3D, camera: Camera): Promise<void>;
   dispose(): void;
 }
 export interface RenderBackend { engine: RenderEngine; canvas: HTMLCanvasElement; kind: 'webgpu' | 'webgl2'; dispose(): void }

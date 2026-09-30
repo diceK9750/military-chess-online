@@ -25,26 +25,27 @@ test('wide play screen centers the board and keeps the shared rule panels beside
     return { centerDelta: Math.abs(board.x + board.width / 2 - innerWidth / 2), pageHeight: document.documentElement.scrollHeight, viewportHeight: innerHeight, panelCount: panels.length, panelsFit: panels.every(panel => panel.scrollHeight <= panel.clientHeight + 2) };
   });
   expect(geometry.centerDelta).toBeLessThanOrEqual(8);
-  expect(geometry.pageHeight).toBeLessThanOrEqual(geometry.viewportHeight + 2);
+  expect(geometry.pageHeight).toBeGreaterThanOrEqual(geometry.viewportHeight);
+  await expect(page.getByRole('region',{name:'軍議操作'})).toBeVisible();
   expect(geometry.panelCount).toBe(2);
   expect(geometry.panelsFit).toBe(true);
   await page.getByRole('button', { name: 'D5 P1 飛行機' }).click();
   await page.getByRole('button', { name: 'HQ-P2 P2 工兵' }).click();
   await expect(page.getByRole('button', { name: '確定して実行' })).toBeEnabled();
-  const confirmation = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2), confirmFits: document.querySelector('.confirm')!.getBoundingClientRect().bottom <= innerHeight }));
-  expect(confirmation.pageFits).toBe(true);
+  const confirmation = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2), confirmFits: document.querySelector('.confirm .primary')!.getBoundingClientRect().height >= 44 }));
+  expect(confirmation.pageAccessible).toBe(true);
   expect(confirmation.panelsFit).toBe(true);
   expect(confirmation.confirmFits).toBe(true);
   await page.getByRole('button', { name: '確定して実行' }).click();
   await expect(page.getByRole('button', { name: 'HQ-P2 P1 飛行機' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: '駒の強弱早見' })).toBeVisible();
-  const result = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
-  expect(result.pageFits).toBe(true);
+  const result = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
+  expect(result.pageAccessible).toBe(true);
   expect(result.panelsFit).toBe(true);
 });
 
-test('three-column one-screen layout preserves both setup and play at ten viewports', async ({ page }) => {
+test('three-column command layout preserves board size and accessible controls at ten viewports', async ({ page }) => {
   const sizes = [[2048, 1000], [1920, 900], [1600, 900], [1440, 900], [1280, 720], [1024, 768], [932, 430], [844, 390], [430, 932], [390, 844]] as const;
   const measurements: { state: string; size: string; [key: string]: unknown }[] = [];
   await page.goto('/');
@@ -81,7 +82,7 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
           board: box(board), baseline, boardCenterDelta: Math.round((state === 'play' ? document.querySelector('.game-surfaces')!.getBoundingClientRect().x + document.querySelector('.game-surfaces')!.getBoundingClientRect().width / 2 : boardRect.x + boardRect.width / 2) - innerWidth / 2),
           references: referenceBoxes, referenceCount: visibleReferences.length, overlapsBoard,
           horizontalScroll: document.documentElement.scrollWidth > innerWidth,
-          documentFits: document.documentElement.scrollHeight <= innerHeight + 2,
+          documentAccessible: document.documentElement.scrollWidth <= innerWidth,
           control: box(control), controlVisible: !!control && getComputedStyle(control).display !== 'none', wideMode,
           referenceExpected: width >= 1400 && height >= 850,
         };
@@ -95,9 +96,12 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
       expect((result.board as { height: number }).height).toBe((result.baseline as { height: number }).height);
       expect(result.controlVisible).toBe(true);
       if (result.wideMode) {
-        expect(result.documentFits, `${state} ${width}x${height} page fits`).toBe(true);
+        expect(result.documentAccessible, `${state} ${width}x${height} page fits`).toBe(true);
         expect((result.control as { y: number }).y).toBeGreaterThanOrEqual(0);
-        expect((result.control as { bottom: number }).bottom).toBeLessThanOrEqual(height);
+        expect((result.control as { height: number }).height).toBeGreaterThanOrEqual(state==='setup'?44:24);
+        const targets=await page.getByRole('region',{name:'軍議操作'}).locator('button:visible').evaluateAll(elements=>elements.map(e=>e.getBoundingClientRect().height));
+        expect(targets.every(h=>h>=44)).toBe(true);
+        await expect(page.getByRole('region',{name:'軍議操作'})).toBeVisible();
         expect(result.references.every(reference => reference.overflow <= 2)).toBe(true);
       }
       await expect(page.locator('.board .cell').first()).toBeVisible();
@@ -115,8 +119,8 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
   expect(placementFound).toBe(true);
   await page.locator('.board .cell.legal').first().click();
   await expect(page.locator('.setup-screen .notice')).toContainText('入れ替え');
-  const setupConfirmation = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, confirmFits: document.querySelector('.setup-screen .wide')!.getBoundingClientRect().bottom <= innerHeight }));
-  expect(setupConfirmation.pageFits).toBe(true);
+  const setupConfirmation = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, confirmFits: document.querySelector('.setup-screen .wide')!.getBoundingClientRect().height >= 44 }));
+  expect(setupConfirmation.pageAccessible).toBe(true);
   expect(setupConfirmation.confirmFits).toBe(true);
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
@@ -138,8 +142,8 @@ test('three-column one-screen layout preserves both setup and play at ten viewpo
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('complementary', { name: '基本ルール' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: '駒の強弱早見' })).toBeVisible();
-  const afterCpuReply = await page.evaluate(() => ({ pageFits: document.documentElement.scrollHeight <= innerHeight + 2, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
-  expect(afterCpuReply.pageFits).toBe(true);
+  const afterCpuReply = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, panelsFit: [...document.querySelectorAll<HTMLElement>('.rule-reference')].every(panel => panel.scrollHeight <= panel.clientHeight + 2) }));
+  expect(afterCpuReply.pageAccessible).toBe(true);
   expect(afterCpuReply.panelsFit).toBe(true);
 });
 

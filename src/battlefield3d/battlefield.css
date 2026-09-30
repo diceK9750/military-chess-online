@@ -218,6 +218,38 @@
 .chronicle-controls span { margin-left:auto; font-size:12px; }
 .chronicle-controls select { color:#18343a; background:#fff; }
 .app-shell--playing:has(.chronicle) .cpu-banner { display:none; }
+.command-deck { padding:10px; margin:6px; border:1px solid #8d9e92; border-radius:9px; background:#f2ebd9; color:#18343a; }
+.command-title { font-size:13px; font-weight:bold; margin-bottom:6px; }
+.command-title small { margin-left:8px; font-size:10px; letter-spacing:.1em; }
+.command-deck button, .command-deck select { min-height:44px; color:#18343a; background:#fffaf0; font-size:13px; }
+.command-deck .primary { background:#f4d277; color:#18343a; }
+.command-deck .notice, .command-deck .formation-control { margin:5px 0; }
+.command-deck .actions { gap:6px; flex-wrap:wrap; }
+.command-deck .selection-panel, .command-deck .confirm { margin:6px 0; padding:8px; }
+.command-deck .intelligence-panel { background:#f8f1dd; color:#18343a; }
+.command-deck .intelligence-heading { flex-wrap:wrap; }
+.command-deck .play-main { max-width:none; width:100%; padding:0; }
+.formation-library summary { cursor:pointer; padding:8px 0; font-size:13px; }
+.formation-library label { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:5px 0; }
+.formation-library input, .formation-library select { min-width:0; max-width:100%; min-height:40px; color:#18343a; background:#fff; }
+.formation-library select { width:min(100%,340px); }
+.formation-library [role=dialog] { background:#fff1d3; padding:10px; border:1px solid #89623c; }
+.app-shell--playing:has(.command-deck), .app-shell--setup:has(.command-deck) { height:auto; min-height:100dvh; overflow:visible; }
+.app-shell--playing:has(.command-deck)>main, .app-shell--setup:has(.command-deck)>main { overflow:visible; }
+.battlefield-panel:has(.command-deck) { flex:0 0 auto; }
+.battlefield-panel:has(.command-deck) .battlefield-stage { flex:0 0 auto; height:clamp(440px,60vh,740px); }
+.battlefield-error:has(.command-deck) .battlefield-stage { height:45px; }
+.battlefield-panel:has(.command-deck) .battlefield-result { position:absolute; }
+.has-fallback .battlefield-panel:has(.command-deck) .battlefield-stage:has(.battlefield-result) { height:auto; }
+.has-fallback .battlefield-panel:has(.command-deck) .battlefield-result { position:relative; }
+@media (min-width:1100px) {
+  .chronicle:not(.has-fallback) .battlefield-panel, .chronicle:not(.has-fallback) .chronicle-commentary { grid-row:3; }
+}
+@media (max-width:600px) {
+  .command-deck { margin:4px; padding:8px; }
+  .command-deck .formation-control { flex-wrap:wrap; }
+  .battlefield-panel:has(.command-deck) .battlefield-stage { height:520px; }
+}
 .chronicle-event { margin:8px 0; padding:8px 10px; background:#30484a; border-left:3px solid #f7d57a; font-size:14px; }
 .chronicle-commentary { margin:8px 0; padding:12px 16px; border:1px solid #b9a16c; border-radius:8px; background:#f6efdc; color:#18343a; line-height:1.65; }
 .chronicle-commentary small { font-size:11px; font-weight:bold; }
@@ -243,3 +275,45 @@
   .chronicle-commentary { padding:10px; }
   .chronicle-commentary h4 { font-size:18px; }
 }
+.battlefield-settings {padding: .35rem .65rem; background:#1e3336;color:#f4ead0;border-radius:.4rem}
+.battlefield-settings summary {cursor:pointer;min-height:44px;display:flex;align-items:center}
+.battlefield-settings label {display:inline-flex;align-items:center;gap:.4rem;margin:.25rem .6rem .25rem 0;min-height:44px}
+.battlefield-settings select {min-height:44px}
+.battlefield-settings small {display:block}
+.formation-library .actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}
+.formation-library .actions button {width:100%;margin:0}
+.victory-celebration .victory-halo {position:absolute;left:50%;top:30%;width:220px;height:220px;border:4px double #ffdf83;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 70px #ffe39a90,inset 0 0 45px #ffdf8350;animation:ceremony-halo 3.8s ease-out both}
+.victory-standard {position:absolute;top:20%;width:100%;text-align:center;font-size:clamp(32px,5vw,66px);font-weight:900;color:#ffe6a1;text-shadow:0 3px 5px #142c30,0 0 25px #ffb700;letter-spacing:.14em;animation:ceremony-title 3.7s ease-out both}
+.victory-standard small {display:block;font-size:12px;letter-spacing:.18em;color:#fff7df}
+.victory-celebration i.petal {border-radius:80% 0 80% 0;width:13px;height:18px}
+.salute-cannon {position:absolute;left:var(--x);top:49%;font-size:38px;color:#b8a576;transform:rotate(-24deg)}
+.salute-cannon b {position:absolute;left:28px;top:-7px;width:28px;height:28px;border-radius:50%;background:#fff0b0;box-shadow:0 0 25px 12px #ffc95a;animation:salute-flash .3s var(--delay) both}
+.salute-cannon em {position:absolute;left:25px;top:-15px;width:45px;height:45px;border-radius:50%;background:#d9d0bd;animation:salute-smoke 1.8s var(--delay) ease-out both}
+.reprise .victory-halo {width:100px;height:100px}
+.reprise .victory-standard {font-size:30px;animation-duration:1.3s}
+@keyframes ceremony-halo {0%{opacity:0;scale:.5}30%{opacity:1}100%{opacity:0;scale:1.5}}
+@keyframes ceremony-title {0%,22%{opacity:0;translate:0 20px}35%,75%{opacity:1;translate:0 0}100%{opacity:0}}
+@keyframes salute-flash {0%,100%{opacity:0}20%{opacity:1}}
+@keyframes salute-smoke {0%{opacity:0;scale:.2}15%{opacity:.7}100%{opacity:0;translate:0 -70px;scale:2.2}}
+@media(prefers-reduced-motion:reduce){.victory-halo,.victory-standard,.salute-cannon{animation:none;display:none}}
+/* Cinema expands to the full battlefield width; narration and commands stay in the same panel. */
+.chronicle:not(.has-fallback) {display:block;max-width:1800px}
+.chronicle .battlefield-panel:has(.command-deck) .battlefield-stage {height:clamp(520px,68vh,880px)}
+.chronicle .chronicle-commentary {margin:4px 6px;padding:8px 12px;line-height:1.5}
+.chronicle .chronicle-commentary p {margin:3px 0}
+.chronicle .chronicle-commentary h4 {font-size:18px}
+.battlefield-capture {padding:8px;gap:8px;display:flex;flex-wrap:wrap}
+.battlefield-capture button {min-height:44px}
+@media(max-width:600px){.chronicle .battlefield-panel:has(.command-deck) .battlefield-stage {height:520px}.chronicle .chronicle-commentary p{font-size:12px}.chronicle-chapters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.chronicle-chapters strong{grid-column:1/-1}.chronicle-chapters button{width:100%;font-size:12px;padding:4px}}
+.app-shell--playing:has(.command-deck) .play-layout,.app-shell--playing:has(.command-deck) .game-surfaces {height:auto;flex:0 0 auto;min-height:0}
+.has-fallback .battlefield-settings,.has-fallback .battlefield-key {display:none}
+.command-deck .command-utilities {display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.command-deck .command-utilities button {width:100%;padding:6px}
+.command-deck .play-main {height:auto;flex:0 0 auto}
+.app-shell--playing:has(.command-deck) .game-screen {height:auto;flex:0 0 auto}
+.app-shell--playing:has(.command-deck) .confirm .actions button {min-height:44px}
+.chronicle .chronicle-commentary {width:auto;max-width:none;grid-column:auto;grid-row:auto}
+.cinema-summary{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:min(90%,540px);padding:12px;background:#19373bf2;border:2px solid #e5c570;border-radius:10px;text-align:center;z-index:2;color:#fff0c2;pointer-events:none}
+.cinema-summary strong,.cinema-summary small,.cinema-summary span{display:block}.cinema-summary strong{font-size:28px}.cinema-summary span{font-size:12px}
+.has-fallback .command-deck .board,.setup-screen--3d.has-fallback .board {height:auto;flex:0 0 auto;min-height:390px;grid-template-rows:16px repeat(8,minmax(44px,1fr))}
+.has-fallback .command-deck .cell,.setup-screen--3d.has-fallback .cell {min-height:44px}
