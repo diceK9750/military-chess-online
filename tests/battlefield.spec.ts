@@ -245,8 +245,10 @@ test('unsupported WebGL leaves 2D play available', async ({ page }) => {
   await move2d(page);
 });
 test('failed lazy download leaves 2D play available', async ({ page }) => {
-  await page.route('**/src/battlefield3d/renderer.ts*', route => route.abort());
+  let blocked=0;
+  await page.route(/\/(?:src\/battlefield3d\/renderer\.ts|assets\/renderer-[^/]+\.js)(?:\?.*)?$/, route => { blocked++; return route.abort(); });
   await fallbackSetup(page);
+  expect(blocked).toBeGreaterThan(0);
   await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
   await move2d(page);
 });
