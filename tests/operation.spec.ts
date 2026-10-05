@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 import { PerspectiveCamera, Vector3 } from 'three';
-import { fullCameraDistance } from '../src/battlefield3d/camera';
 import { sitePoint } from '../src/battlefield3d/state';
 import { defaultPlacement } from '../src/dev/fixtures';
 import { applyMove, startGame } from '../src/game/game';
@@ -15,8 +14,10 @@ const canvasName='操作可能な三次元戦場';
 const canvas=(page:Page)=>page.getByRole('img',{name:canvasName});
 async function point(page:Page,site:Site,height=.31,offset=0) {
   await canvas(page).scrollIntoViewIfNeeded();
-  const b=(await canvas(page).boundingBox())!,c=new PerspectiveCamera(42,b.width/b.height,.1,100),d=fullCameraDistance(c.aspect);
-  c.position.set(0,d*.86,d*.6);c.lookAt(0,.25,0);c.updateMatrixWorld();
+  const b=(await canvas(page).boundingBox())!,c=new PerspectiveCamera(42,b.width/b.height,.1,100);
+  const pose=(await canvas(page).getAttribute('data-camera-pose'))?.split('/').map(Number);
+  expect(pose,'renderer exposes camera position and target').toHaveLength(6);expect(pose!.every(Number.isFinite)).toBe(true);
+  c.position.set(pose![0],pose![1],pose![2]);c.lookAt(pose![3],pose![4],pose![5]);c.updateMatrixWorld();
   const p=sitePoint(site),v=new Vector3(p.x+offset,height,p.z).project(c);
   return {x:b.x+(v.x+1)*b.width/2,y:b.y+(1-v.y)*b.height/2};
 }
@@ -45,12 +46,25 @@ async function saved(page:Page) { return page.evaluate(()=>JSON.parse(localStora
 
 test('fixed presets, selection focus and cancellation never alter the setup',async({page,isMobile})=>{
   await setup(page);const before=await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'));
-  await expect(page.getByRole('button',{name:'直前の手を追う'})).toBeDisabled();
-  for(const [name,preset] of [['自軍正面','front'],['敵軍正面','enemy'],['真上','top'],['全景','full']]){
-    const button=page.getByRole('button',{name,exact:true});await button.click();
-    await expect(button).toHaveAttribute('aria-pressed','true');await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
+  const detail=page.getByRole('combobox',{name:'カメラの詳細視点'});
+  await expect(detail.locator('option[value="last"]')).toHaveJSProperty('disabled', true);
+  await expect(detail.locator('option[value="selected"]')).toHaveJSProperty('disabled', true);
+  await expect(page.locator('.battlefield-cameras button')).toHaveCount(3);
+  for(const preset of ['front','enemy','top','full']){
+    await detail.selectOption(preset);await expect(detail).toHaveValue(preset);
+    await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
   }
-  await tap(page,'B1',!!isMobile);await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
+  const overviewPose=await canvas(page).getAttribute('data-camera-pose');
+  await tap(page,'B1',!!isMobile);
+  await expect(canvas(page)).toHaveAttribute('data-camera-preset','selected');
+  await expect(canvas(page)).not.toHaveAttribute('data-camera-pose',overviewPose!);
+  await expect(detail).toHaveValue('selected');
+  await expect(page.getByRole('complementary',{name:'全体位置図・自軍が下'})).toBeVisible();
+  await page.getByRole('button',{name:'全景',exact:true}).click();
+  await expect(canvas(page)).toHaveAttribute('data-camera-pose',overviewPose!);
+  await expect(page.locator('.selection-panel')).toContainText('B1');
+  await expect(page.getByRole('complementary',{name:'全体位置図・自軍が下'})).toHaveCount(0);
+  await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
   await expect(canvas(page)).toHaveAttribute('data-camera-preset','selected');
   await page.getByRole('button',{name:'選択を解除',exact:true}).click();
   await expect(canvas(page)).toHaveAttribute('data-camera-preset','full');
@@ -79,7 +93,8 @@ for(const [width,height] of [[1920,1080],[1440,900],[1280,720],[430,932],[390,84
     await expect(page.locator('.own-hq')).toContainText('HQ-P1 · 自軍');await expect(page.locator('.own-hq')).not.toContainText('?');
     await page.screenshot({path:info.outputPath('identity-'+width+'.png'),fullPage:true});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    const b=(await canvas(page).boundingBox())!;expect(b.height).toBeGreaterThan(width>=1400?350:430);
+    const b=(await canvas(page).boundingBox())!;expect(b.height).toBeGreaterThan(width<=600?200:350);
+    if(width<=600){await page.evaluate(()=>scrollTo(0,0));await expect(canvas(page)).toBeInViewport({ratio:1});await expect(page.getByRole('button',{name:'この配置で確定'})).toBeInViewport({ratio:1});}
     await page.reload();await page.getByRole('button',{name:/続きから/}).click();await expect(canvas(page)).toBeVisible();
     expect(await page.getByRole('list',{name:'三次元表示中の駒'}).locator('li').allTextContents()).toEqual(lines);
   });
@@ -116,7 +131,7 @@ test('3D drag executes official move once, CPU replies, save/resume and retap re
   const after=await saved(page);expect(after.game.events.filter((e:{kind:string})=>e.kind==='MOVE').slice(-2)[0].move).toEqual(move);
   await expect(canvas(page)).not.toHaveAttribute('data-battle-effect',/./);await page.waitForTimeout(400);
   const next=legalMoves(after.game.pieces,1)[0];await tap(page,next.from,!!isMobile);await tap(page,next.to,!!isMobile);
-  if(next.lane)await page.getByRole('button',{name:'三次元 '+next.lane+'列'}).click();
+  if(next.lane){const lane=page.getByRole('radio',{name:next.lane+'列を通る'});if(await lane.count())await lane.check();}
   await expect(page.locator('.confirm')).toBeVisible();await tap(page,next.to,!!isMobile);
   await expect.poll(async()=> (await saved(page)).game.moveCount).toBe(after.game.moveCount+2);
   await expect(canvas(page)).not.toHaveAttribute('data-battle-effect',/./);await page.waitForTimeout(400);

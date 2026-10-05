@@ -242,7 +242,7 @@ test('complete CPU game from 3D setup to terminal through 3D callbacks alone, wi
     fireEvent.click(screen.getByText('終局後の全駒・初期配置・戦闘を確認'));
     expect(screen.getByText('コンピューターの初期配置')).toBeInTheDocument();
   } finally { vi.useRealTimers(); }
-});
+}, 20000); // Full match has a bounded 1,200-ply loop; allow shared CI CPU contention.
 
 test.each([
   [{ winner: 1, reason: 'HQ_CAPTURE' }, 'あなたの勝利', 'あなたがコンピューターの司令部を占領'],
@@ -272,4 +272,45 @@ test('a live victory remains fresh when parent autosave updates initial; resumed
  expect(latest().finished).toBe(true);expect(latest().freshVictory).toBe(true);view.unmount();
  render(<LocalGame initial={{...scenario('capture'),result:{winner:1,reason:'HQ_CAPTURE'},turn:null}} mode="cpu"/>);
  await waitFor(()=>expect(mock.create).toHaveBeenCalledTimes(2));expect(latest().freshVictory).toBe(false);
+});
+
+test('primary confirmation lives below the canvas and outside optional commands', async () => {
+ render(<LocalGame initial={scenario('highFlight')}/>);
+ await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+ act(()=>input().onSiteSelect('D5')); act(()=>input().onSiteSelect('HQ-P2'));
+ const confirm=screen.getByRole('button',{name:'確定して実行'});
+ expect(confirm.closest('.battlefield-primary')).not.toBeNull();
+ expect(confirm.closest('.command-deck')).toBeNull();
+ expect(confirm.closest('.battlefield-stage')).toBeNull();
+ const viewport=document.querySelector('.battlefield-viewport')!;
+ expect(viewport.contains(confirm)).toBe(true);
+ fireEvent.click(screen.getByRole('button',{name:'選び直す'}));
+ expect(latest().interaction.selectedSite).toBe('D5');
+ expect(latest().interaction.pendingSite).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'選択を解除'}));
+ expect(latest().interaction.selectedSite).toBeNull();
+});
+test('automatic camera feedback updates compact toolbar and safe overview', async () => {
+ const selected={...state(),interaction:{...state().interaction,selectedSite:'D5' as const,legalTargets:['D6' as const],interactionEnabled:true}};
+ render(<BattlefieldView state={selected} {...handlers}/>);
+ await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+ act(()=>input().onCameraChange?.('selected'));
+ expect(screen.getByRole('button',{name:'選択中の駒'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('img',{name:'全体位置図'})).toBeInTheDocument();
+ act(()=>input().onCameraChange?.('full'));
+ expect(screen.getByRole('button',{name:'全景'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.queryByRole('img',{name:'全体位置図'})).not.toBeInTheDocument();
+});
+
+test('rendering failure at game end keeps result actions available in the fallback stage', async () => {
+ const onNewGame=vi.fn(),onSave=vi.fn();
+ render(<LocalGame initial={{...scenario('capture'),turn:null,result:{winner:1,reason:'HQ_CAPTURE'}}} mode="cpu" onNewGame={onNewGame} onSave={onSave}/>);
+ await waitFor(()=>expect(mock.create).toHaveBeenCalled());
+ act(()=>mock.create.mock.calls[0][2]());
+ const result=screen.getByRole('status',{name:'対局結果'});
+ expect(result.closest('.battlefield-error')).not.toBeNull();
+ expect(result.parentElement).toHaveClass('battlefield-stage');
+ fireEvent.click(screen.getByRole('button',{name:'結果を保存'}));
+ fireEvent.click(screen.getByRole('button',{name:'新しい対局'}));
+ expect(onSave).toHaveBeenCalledOnce();expect(onNewGame).toHaveBeenCalledOnce();
 });

@@ -38,6 +38,7 @@ export interface BattlefieldHandlers {
   onDragStart?(site: Site): void;
   onPieceDrop?(from: Site, to: Site, lane?: 'C' | 'D'): void;
   onAnimationChange?(active: boolean): void;
+  onCameraChange?(preset: CameraPreset): void;
 }
 export type CameraPreset = 'full' | 'top' | 'front' | 'enemy' | 'selected' | 'last';
 const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };

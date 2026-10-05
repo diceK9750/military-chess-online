@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { sitePoint } from '../src/battlefield3d/state';
-import { fullCameraDistance } from '../src/battlefield3d/camera';
 import type { Site } from '../src/game/types';
 
 test.use({ launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } });
@@ -48,15 +47,16 @@ async function start(page: Page) {
   await page.getByRole('button', { name: 'この配置で確定' }).click();
   await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
 }
-async function point(page: Page, site: Site, height = 0.31, preset: 'full' | 'top' = 'full') {
+async function point(page: Page, site: Site, height = 0.31) {
   const canvas = page.getByRole('img', { name: canvasName });
   await canvas.scrollIntoViewIfNeeded();
   const box = (await canvas.boundingBox())!;
   const camera = new PerspectiveCamera(42, box.width / box.height, 0.1, 100);
-  const distance = fullCameraDistance(camera.aspect, preset === 'top');
-  if (preset === 'top') camera.position.set(0, distance, .001);
-  else camera.position.set(0, distance * .86, distance * .6);
-  camera.lookAt(0, .25, 0); camera.updateMatrixWorld();
+  const pose = (await canvas.getAttribute('data-camera-pose'))?.split('/').map(Number);
+  expect(pose, 'renderer exposes camera position and target').toHaveLength(6);
+  expect(pose!.every(Number.isFinite)).toBe(true);
+  camera.position.set(pose![0], pose![1], pose![2]);
+  camera.lookAt(pose![3], pose![4], pose![5]); camera.updateMatrixWorld();
   const world = sitePoint(site), position = new Vector3(world.x, height, world.z).project(camera);
   return { x: box.x + (position.x + 1) * box.width / 2, y: box.y + (1 - position.y) * box.height / 2 };
 }
@@ -90,6 +90,8 @@ async function choose3d(page: Page, touch = false): Promise<Site> {
   for (const line of pieces.filter(text => text.includes('自軍'))) {
     await tap(page, line.split(' ')[0] as Site, touch);
     if (await page.locator('[data-target]').count()) return await page.locator('[data-target]').first().getAttribute('data-target') as Site;
+    // An immobile selection can focus a small region; reveal the next candidate before picking it.
+    await page.getByRole('button', { name: '全景', exact: true }).click();
   }
   throw new Error('No legal target found using 3D picking');
 }
@@ -127,7 +129,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     expect(editedSetup.cpuSeed).toBe(originalSetup.cpuSeed);
     expect(editedSetup.difficulty).toBe(originalSetup.difficulty);
     const visibleSetup = await page.getByRole('list', { name: '三次元表示中の駒' }).textContent();
-    await page.getByRole('button', { name: '真上', exact: true }).click();
+    await page.getByRole('combobox', { name: 'カメラの詳細視点' }).selectOption('top');
     await page.evaluate(() => scrollTo(0, 0));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (width >= 1400) expect((await page.locator('.battlefield-stage').boundingBox())!.height).toBeGreaterThanOrEqual(440);
@@ -281,7 +283,7 @@ test('3D fixed presets replace drag and zoom without changing placement; top-dow
   await tap(page, 'B1', !!isMobile);
   await page.getByRole('button', { name: '選択中の駒', exact: true }).click();
   await page.screenshot({ path: info.outputPath('setup-selected.png') });
-  await page.getByRole('button', { name: '自軍正面', exact: true }).click();
+  await page.getByRole('combobox', { name: 'カメラの詳細視点' }).selectOption('front');
   await page.screenshot({ path: info.outputPath('setup-front.png') });
   await page.getByRole('button', { name: '選択を解除', exact: true }).click();
   await page.getByRole('button', { name: '全景', exact: true }).click();
@@ -316,9 +318,9 @@ test('3D fixed presets replace drag and zoom without changing placement; top-dow
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.locator('.selection-panel')).toHaveCount(0);
   expect(await setupSaved(page)).toEqual(saved);
-  await page.getByRole('button', { name: '真上', exact: true }).click();
+  await page.getByRole('combobox', { name: 'カメラの詳細視点' }).selectOption('top');
   for (const site of ['B1', 'E1'] as const) {
-    const location = await point(page, site, .31, 'top');
+    const location = await point(page, site, .31);
     if (isMobile) await page.touchscreen.tap(location.x, location.y); else await page.mouse.click(location.x, location.y);
   }
   await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
@@ -469,5 +471,84 @@ test('3D CPU match encrypted export and import restores the same position', asyn
   await page.getByRole('button', { name: '読み込んだ対局へ置き換える' }).click();
   await expect(page.getByRole('img', { name: canvasName })).toBeVisible();
   await expect(page.getByRole('list', { name: '三次元表示中の駒' })).toHaveText(before!);
+  await expect(page.locator('.board')).toHaveCount(0);
+});
+
+async function portraitEssentials(page: Page, names: readonly string[]) {
+  await page.evaluate(() => { scrollTo(0, 0); return new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); });
+  const canvas = page.getByRole('img', { name: canvasName });
+  await expect(canvas).toBeInViewport({ ratio: 1 });
+  const area = (await canvas.boundingBox())!;
+  expect(area.height, 'canvas remains usable with the controls visible').toBeGreaterThanOrEqual(160);
+  for (const name of names) {
+    const button = page.getByRole('button', { name, exact: true });
+    await expect(button).toBeInViewport({ ratio: 1 });
+    expect((await button.boundingBox())!.height, name + ' touch target').toBeGreaterThanOrEqual(44);
+  }
+  const detail = page.getByRole('combobox', { name: 'カメラの詳細視点' });
+  await expect(detail).toBeInViewport({ ratio: 1 });
+  const toolbar = await page.locator('.battlefield-cameras').evaluate(element => {
+    const controls = [...element.querySelectorAll('button, select')].map(control => control.getBoundingClientRect());
+    return { tops: controls.map(rect => rect.top), heights: controls.map(rect => rect.height), overflow: element.scrollWidth > element.clientWidth };
+  });
+  expect(Math.max(...toolbar.tops) - Math.min(...toolbar.tops), 'camera controls stay on one row').toBeLessThanOrEqual(1);
+  expect(toolbar.heights.every(height => height >= 44)).toBe(true);
+  expect(toolbar.overflow).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+}
+
+test('portrait canvas and essential setup/move controls fit after viewport height changes and rotation', async ({ page, isMobile }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(entry);
+  await page.getByRole('button', { name: /コンピューターと対戦/ }).first().click();
+  await page.getByRole('button', { name: /^かんたん/ }).click();
+  const canvas = page.getByRole('img', { name: canvasName });
+  await expect(canvas).toBeVisible();
+  await portraitEssentials(page, ['全景', '選択中の駒', '視点を戻す', 'この配置で確定']);
+  const original = await setupSaved(page);
+  await tap(page, 'B1', !!isMobile);
+  await expect(canvas).toHaveAttribute('data-camera-preset', 'selected');
+  await expect(canvas).toHaveAttribute('data-focus-motion', 'static');
+  await expect(page.getByRole('complementary', { name: '全体位置図・自軍が下' })).toBeVisible();
+  for (const [width, height] of [[390,664], [320,568], [360,640], [430,932], [390,844]]) {
+    await page.setViewportSize({ width, height });
+    await portraitEssentials(page, ['この配置で確定', '選択を解除']);
+    await expect(canvas).toHaveAttribute('data-camera-preset', 'selected');
+    const sites = (await canvas.getAttribute('data-focus-sites'))!.split('/') as Site[];
+    expect(sites).toContain('B1');
+    for (const site of sites) {
+      const location = await point(page, site, .075), area = (await canvas.boundingBox())!;
+      expect(location.x, `${site} within focused width`).toBeGreaterThan(area.x);
+      expect(location.x).toBeLessThan(area.x + area.width);
+      expect(location.y, `${site} within focused height`).toBeGreaterThan(area.y);
+      expect(location.y).toBeLessThan(area.y + area.height);
+    }
+  }
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await portraitEssentials(page, ['この配置で確定', '選択を解除']);
+  await page.getByRole('button', { name: '全景', exact: true }).click();
+  await expect(canvas).toHaveAttribute('data-camera-preset', 'full');
+  await expect(page.locator('.selection-panel')).toContainText('B1');
+  await page.getByRole('button', { name: '選択を解除', exact: true }).click();
+  expect(await setupSaved(page)).toEqual(original);
+  await page.getByRole('button', { name: 'この配置で確定' }).click();
+  await expect(page.getByRole('heading', { name: 'あなたの手番' })).toBeVisible();
+  const saved = await page.evaluate(() => localStorage.getItem('military-chess:cpu-match:v1'));
+  const target = await choose3d(page, !!isMobile);
+  await tap(page, target, !!isMobile);
+  for (const [width, height] of [[390,664], [320,568], [430,932], [390,844]]) {
+    await page.setViewportSize({ width, height });
+    await portraitEssentials(page, ['選び直す', '選択を解除', '確定して実行']);
+    await expect(page.locator('.battlefield-selection')).toContainText(`${target}・確定待ち`);
+  }
+  await page.getByRole('button', { name: '選び直す', exact: true }).click();
+  await expect(page.locator('.confirm')).toHaveCount(0);
+  await expect(canvas).toHaveAttribute('data-camera-preset', 'selected');
+  await tap(page, target, !!isMobile);
+  await page.getByRole('button', { name: '選択を解除', exact: true }).click();
+  await expect(canvas).toHaveAttribute('data-camera-preset', 'full');
+  expect(await page.evaluate(() => localStorage.getItem('military-chess:cpu-match:v1'))).toBe(saved);
   await expect(page.locator('.board')).toHaveCount(0);
 });

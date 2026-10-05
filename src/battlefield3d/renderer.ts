@@ -9,10 +9,11 @@ import { TapGesture } from './gesture';
 import { createBackend } from './backend';
 import { identity } from './identity';
 import { allowBattleCamera, motionProfile } from './presentation';
-import { fullCameraDistance } from './camera';
+import { fullCameraDistance, selectionCameraFrame, selectionCameraUpdate } from './camera';
 import { qualityProfile } from './settings';
 import { approachingEnemies, snapTarget } from './assistance';
 import { addOfficerRegalia, officerLook } from './regalia';
+import { SELECTED_PIECE_SCALE, selectionMarker } from './selectionPresentation';
 
 export interface BattlefieldRenderer {
   readonly backend: 'webgpu' | 'webgl2';
@@ -30,7 +31,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   canvas.dataset.backend = backend.kind;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#24383d');
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
   const controls = new OrbitControls(camera, canvas);
   controls.enabled = false; // Presets alone move the camera; gestures belong to pieces or page scrolling.
   controls.enableRotate = false;
@@ -39,8 +40,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   controls.enableDamping = false; // Event-driven frames, no idle animation loop.
   controls.minPolarAngle = 0;
   controls.maxPolarAngle = Math.PI / 2.6;
-  controls.minDistance = 7;
-  controls.maxDistance = 34;
+  controls.minDistance = 3.8;
+  controls.maxDistance = 120;
   controls.rotateSpeed = 0.7;
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
@@ -79,6 +80,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   let lastSize = '';
   let observer: ResizeObserver | undefined;
   let cameraPreset: CameraPreset = 'full';
+  let cameraRevision = 0;
+  let hasUpdated = false;
+  let focusAfterDrag = false;
   function geometry<T extends THREE.BufferGeometry>(value: T): T { geometries.add(value); return value; }
   function material(color: string) {
     const value = new THREE.MeshLambertMaterial({ color, flatShading: true }); materials.add(value); return value;
@@ -113,7 +117,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const moving = animateFrame?.(now) ?? false;
         const effects = effectsFrame?.(now) ?? false;
         const active = moving || effects;
-        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12)));});
+        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12)) * (label.userData.focusScale ?? 1));});
+        canvas.dataset.cameraPose = camera.position.toArray().join('/') + '/' + controls.target.toArray().join('/');
         renderer.render(scene, camera);
         if (!moving) animateFrame=undefined;
         if (!active) animationStatus(false);
@@ -124,14 +129,22 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   }
   function setCamera(preset: CameraPreset, manual=false) {
     if(manual)lastManual=performance.now();
+    if(manual)focusAfterDrag=false;
+    // Stop an older battle director from restoring a stale camera after a new selection/reset.
+    restoreFocus?.();
+    cameraRevision++;
     cameraPreset = preset;
     const distance = fullCameraDistance(camera.aspect);
     const side = state.viewer === 1 ? 1 : -1;
     if (preset === 'top') {
       controls.target.set(0, .25, 0);
       camera.position.set(0, fullCameraDistance(camera.aspect, true), side * .001);
-    } else if (preset === 'front' || preset === 'enemy' || preset === 'selected') {
-      const point = preset === 'selected' && state.interaction.selectedSite ? sitePoint(state.interaction.selectedSite) : { x: 0, z: (preset === 'enemy' ? -side : side) * 2 };
+    } else if (preset === 'selected' && state.interaction.selectedSite) {
+      const focus = selectionCameraFrame(camera.aspect, state.viewer, state.interaction.selectedSite, state.interaction.legalTargets, state.interaction.pendingSite);
+      controls.target.set(...focus.target); camera.position.set(...focus.position);
+      canvas.dataset.focusSites=focus.sites.join('/');
+    } else if (preset === 'front' || preset === 'enemy') {
+      const point = { x: 0, z: (preset === 'enemy' ? -side : side) * 2 };
       const near = Math.min(24, Math.max(7, 7 / camera.aspect));
       controls.target.set(point.x, .3, point.z);
       camera.position.set(point.x, near * .78, point.z + (preset === 'enemy' ? -side : side) * near * .7);
@@ -142,8 +155,12 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       controls.target.set(x, .25, z);
       camera.position.set(x, distance * .86, z + side * distance * .6);
     }
+    if(preset!=='selected')delete canvas.dataset.focusSites;
+    // Reframing is deliberately immediate: the next tap has a stable target, also with reduced motion.
+    canvas.dataset.focusMotion='static';
     controls.update(); canvas.dataset.cameraPreset = preset;
     canvas.dataset.cameraPose = camera.position.toArray().join('/') + '/' + controls.target.toArray().join('/');
+    handlers.onCameraChange?.(preset);
     requestDraw();
   }
   function reset() { setCamera('full',true); }
@@ -174,7 +191,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   function cancelDrag() {
     pieceDrag = null; dragGhost.clear(); dragLabel.clear();
     canvas.style.cursor='default';
-    delete canvas.dataset.dragging; delete canvas.dataset.dragTarget; requestDraw();
+    delete canvas.dataset.dragging; delete canvas.dataset.dragTarget;
+    if(focusAfterDrag){focusAfterDrag=false;const preset=selectionCameraUpdate(null,state,cameraPreset);if(preset)setCamera(preset);}
+    requestDraw();
   }
   function dropTarget(event:PointerEvent) {
     const bounds=canvas.getBoundingClientRect();
@@ -294,6 +313,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     }
     const face = geometry(new THREE.PlaneGeometry(0.8, 0.29));
     const geometryTag = geometry(new THREE.PlaneGeometry(.45,.19));
+    const focusTag = geometry(new THREE.PlaneGeometry(.72,.25));
     const body = geometry(new THREE.CylinderGeometry(.13, .19, .27, 6));
     const headShape = geometry(new THREE.IcosahedronGeometry(.13, 0));
     const helmet = geometry(new THREE.CylinderGeometry(.17, .18, .1, 6));
@@ -347,6 +367,11 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const arrowShaft = geometry(new THREE.CylinderGeometry(0.026, 0.026, 1, 6));
     const arrowHead = geometry(new THREE.ConeGeometry(0.12, 0.28, 6));
     const gold = material('#efd16a'), selectedMaterial = material('#65d6df'), pendingMaterial = material('#ffa656');
+    const pendingFill = new THREE.MeshBasicMaterial({color:'#ffae59',transparent:true,opacity:.3,depthWrite:false});materials.add(pendingFill);
+    const selectionFill = new THREE.MeshBasicMaterial({color:'#65d6df',transparent:true,opacity:.18,depthWrite:false});materials.add(selectionFill);
+    const selectionPad = geometry(new THREE.BoxGeometry(.94,.012,.94));
+    const wideSelectionPad = geometry(new THREE.BoxGeometry(1.94,.012,.94));
+    const pendingEdge = geometry(new THREE.BoxGeometry(1,.045,.065));
     const ring = geometry(new THREE.TorusGeometry(0.44, 0.035, 4, 24));
     const wideRing = geometry(new THREE.TorusGeometry(0.7, 0.035, 4, 24));
     const pathShape = geometry(new THREE.BoxGeometry(0.12, 0.04, 6));
@@ -360,6 +385,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     function update(next: BattlefieldViewState) {
       if (disposed) return;
       const previous = state;
+      const previousCameraState = hasUpdated ? previous : null;
+      hasUpdated = true;
       const transition = next.moveCount === previous.moveCount + 1 && next.lastMove ? next.lastMove : null;
       const movingPiece = transition ? previous.pieces.find(piece => piece.position === transition.from) : undefined;
       animateFrame = undefined;hover.clear();hovered=null;delete canvas.dataset.hoverSite;
@@ -369,6 +396,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       canvas.dataset.overlay=String(!!state.overlay);
       if(previous.quality!==next.quality){lastSize='';resize();}
       if (pieceDrag && (next.moveCount !== pieceDrag.moveCount || !next.interaction.interactionEnabled)) cancelDrag();
+      const selectionPreset=selectionCameraUpdate(previousCameraState,next,cameraPreset);
+      if(pieceDrag?.active){if(selectionPreset)focusAfterDrag=true;}
+      else if(selectionPreset)setCamera(selectionPreset);
+      else if(cameraPreset==='last')setCamera('last');
       for (const hq of hqSigns) {
         const own = hq.owner === state.viewer;
         hq.curtain.material = own ? blue : red;
@@ -377,7 +408,13 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       const moving = new THREE.Group();
       for (const piece of state.pieces) {
         const { x, z } = sitePoint(piece.position), own = piece.owner === state.viewer;
-        const group = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
+        const parent = transition && movingPiece && piece.position === transition.to && piece.owner === movingPiece.owner ? moving : units;
+        const group = new THREE.Group(); parent.add(group);
+        const selectedPiece = own && piece.position === state.interaction.selectedSite;
+        if(selectedPiece){
+          // Actual silhouette magnification, anchored to the selected cell, not just a larger outline.
+          const scale=SELECTED_PIECE_SCALE;group.scale.setScalar(scale);group.position.set(x*(1-scale),0,z*(1-scale));
+        }
         const base = mesh(badge, baseWood, x, .075, z, group); base.rotation.y = piece.owner === 1 ? 0 : Math.PI; base.userData = { site: piece.position };
         const uniform = own ? blue : red;
         const style = identity(piece);
@@ -442,7 +479,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const engraving = mesh(baseName, label(text, '#2b251d', '#c8a779', true), x, .223, z + .22, group); engraving.rotation.x = -Math.PI / 2; engraving.userData = { site: piece.position };
         const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, Math.max(1.14,1.2*stature), z, group);
         plaque.renderOrder=5;
-        plaque.userData = { site: piece.position }; billboards.push(plaque);
+        plaque.userData = { site: piece.position, ...(selectedPiece ? {focusScale:1.12} : {}) }; billboards.push(plaque);
       }
       units.add(moving);
       if (transition && movingPiece && !reducedMotion.matches) {
@@ -476,10 +513,10 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           slash.rotation.y = i === 0 ? Math.PI / 4 : -Math.PI / 4;
           return slash;
         });
-        const cameraPosition=camera.position.clone(),cameraTarget=controls.target.clone();
+        const cameraPosition=camera.position.clone(),cameraTarget=controls.target.clone(),focusRevision=cameraRevision;
         const focus=allowBattleCamera(false,started-lastManual);
         restoreFocus = () => {
-          if (focus && lastManual <= started) {
+          if (focus && lastManual <= started && focusRevision===cameraRevision) {
             camera.position.copy(cameraPosition); controls.target.copy(cameraTarget); controls.update();
           }
           restoreFocus = undefined;
@@ -491,13 +528,16 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           slashes.forEach(slash => { slash.scale.set(4 * (1 - t), 1, 1); slash.position.y = 1.1 + Math.sin(t * Math.PI) * .2; });
           flash.scale.setScalar(.8+t*.9);lightFx.opacity=(1-t)*.8;inkFx.opacity=(1-t)*.8;
           if(outcome==='MUTUAL'){flash.scale.x*=1.4;flash.rotation.z=t*Math.PI;}
-          if(focus&&lastManual<=started){const zoom=Math.sin(t*Math.PI)*.45;camera.position.copy(cameraPosition).lerp(new THREE.Vector3(at.x,5,at.z+(state.viewer===1?4:-4)),zoom);controls.target.copy(cameraTarget).lerp(new THREE.Vector3(at.x,.3,at.z),zoom);controls.update();}
+          if(focus&&lastManual<=started&&focusRevision===cameraRevision){const zoom=Math.sin(t*Math.PI)*.45;camera.position.copy(cameraPosition).lerp(new THREE.Vector3(at.x,5,at.z+(state.viewer===1?4:-4)),zoom);controls.target.copy(cameraTarget).lerp(new THREE.Vector3(at.x,.3,at.z),zoom);controls.update();}
           if(t===1){restoreFocus?.();fxGroup.clear();delete canvas.dataset.battleEffect;return false;}return true;
         };
       } else if(next.moveCount!==previous.moveCount&&!transition){restoreFocus?.();fxGroup.clear();effectsFrame=undefined;delete canvas.dataset.battleEffect;}
       animationStatus(!!animateFrame || !!effectsFrame);
-      if (cameraPreset === 'selected' || cameraPreset === 'last' || next.viewer !== previous.viewer) setCamera(cameraPreset === 'selected' && !next.interaction.selectedSite ? 'full' : cameraPreset);
       const interaction = state.interaction;
+      canvas.dataset.selectedSite=interaction.selectedSite??'';
+      canvas.dataset.pendingSite=interaction.pendingSite??'';
+      canvas.dataset.legalTargets=[...new Set(interaction.legalTargets)].join('/');
+      canvas.dataset.selectedPieceScale=interaction.selectedSite?String(SELECTED_PIECE_SCALE):'1';
       if(state.overlay){
         for(const site of approachingEnemies(state)){
           const p=sitePoint(site),mark=mesh(wideRing,pendingMaterial,p.x,.19,p.z,overlays);mark.rotation.x=-Math.PI/2;
@@ -522,14 +562,26 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       }
       for (const site of new Set([...interaction.legalTargets, ...(interaction.selectedSite ? [interaction.selectedSite] : []), ...(interaction.pendingSite ? [interaction.pendingSite] : [])])) {
         const { x, z } = sitePoint(site);
-        const mark = mesh(site.startsWith('HQ') ? wideRing : ring, site === interaction.pendingSite ? pendingMaterial : site === interaction.selectedSite ? selectedMaterial : gold, x, 0.13, z, overlays);
-        mark.rotation.x = -Math.PI / 2; mark.userData = { site };
-        if (site === interaction.selectedSite || site === interaction.pendingSite) mark.scale.setScalar(1.16);
-        const text=site===interaction.pendingSite?(interaction.laneCandidates.length<2||interaction.selectedLane?'確定':'予定'):site===interaction.selectedSite?'選択':state.phase==='setup'?'交換':'移';
-        const tag=mesh(geometryTag,label(text,'#29261d',site===interaction.pendingSite?'#ffd58d':site===interaction.selectedSite?'#adf5f0':'#ffe18a',true),x,.3,z+.34,overlays);
+        const presentation=selectionMarker(site,interaction,state.phase==='setup');
+        const pending=presentation.kind==='pending',selected=presentation.kind==='selected';
+        if(pending||selected){
+          const pad=mesh(site.startsWith('HQ')?wideSelectionPad:selectionPad,pending?pendingFill:selectionFill,x,.085,z,overlays);pad.userData={site};
+        }
+        if(presentation.shape==='square'){
+          // A filled square and four heavy edges stay distinct from every hollow legal circle.
+          const width=site.startsWith('HQ')?1.86:.88;
+          for(const side of [-1,1]){
+            const horizontal=mesh(pendingEdge,pendingMaterial,x,.16,z+side*.44,overlays);horizontal.scale.x=width;horizontal.userData={site};
+            const vertical=mesh(pendingEdge,pendingMaterial,x+side*width/2,.16,z,overlays);vertical.rotation.y=Math.PI/2;vertical.scale.x=.94;vertical.userData={site};
+          }
+        }else{
+          const mark=mesh(site.startsWith('HQ')?wideRing:ring,selected?selectedMaterial:gold,x,.13,z,overlays);
+          mark.rotation.x=-Math.PI/2;mark.userData={site};if(selected)mark.scale.setScalar(1.16);
+        }
+        const tag=mesh(pending||selected?focusTag:geometryTag,label(presentation.text,'#29261d',pending?'#ffd58d':selected?'#adf5f0':'#ffe18a',true),x,.34,z+(state.viewer===1?.35:-.35),overlays);
         tag.userData={site};tag.renderOrder=6;billboards.push(tag);
       }
-      if(interaction.selectedSite&&interaction.pendingSite){const a=sitePoint(interaction.selectedSite),b=sitePoint(interaction.pendingSite),dir=new THREE.Vector3(b.x-a.x,0,b.z-a.z);const shaft=mesh(arrowShaft,pendingMaterial,(a.x+b.x)/2,.25,(a.z+b.z)/2,overlays);shaft.scale.y=dir.length();shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());}
+      if(interaction.selectedSite&&interaction.pendingSite){const a=sitePoint(interaction.selectedSite),b=sitePoint(interaction.pendingSite),dir=new THREE.Vector3(b.x-a.x,0,b.z-a.z);const shaft=mesh(arrowShaft,pendingMaterial,(a.x+b.x)/2,.25,(a.z+b.z)/2,overlays);shaft.scale.y=dir.length();shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());const head=mesh(arrowHead,pendingMaterial,b.x,.25,b.z,overlays);head.quaternion.copy(shaft.quaternion);}
       for (const lane of interaction.laneCandidates) {
         const path = mesh(pathShape, lane === interaction.selectedLane ? pendingMaterial : gold, lane === 'C' ? -0.5 : 0.5, 0.72, 0, overlays);
         path.userData = { lane };

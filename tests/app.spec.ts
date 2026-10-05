@@ -76,7 +76,7 @@ test('three-column command layout preserves board size and accessible controls a
         references.forEach(element => { element.style.visibility = 'hidden'; });
         const baseline = box(board);
         references.forEach((element, index) => { element.style.visibility = savedVisibility[index]; });
-        const control = state === 'setup' ? document.querySelector('.setup-screen .wide') : document.querySelector('.move-prompt') ?? document.querySelector('.confirm .primary');
+        const control = state === 'setup' ? document.querySelector('.setup-screen .setup-primary > .primary') : document.querySelector('.move-prompt') ?? document.querySelector('.confirm .primary');
         const wideMode = width >= 1200 && height >= 800;
         return {
           board: box(board), baseline, boardCenterDelta: Math.round((state === 'play' ? document.querySelector('.game-surfaces')!.getBoundingClientRect().x + document.querySelector('.game-surfaces')!.getBoundingClientRect().width / 2 : boardRect.x + boardRect.width / 2) - innerWidth / 2),
@@ -119,7 +119,7 @@ test('three-column command layout preserves board size and accessible controls a
   expect(placementFound).toBe(true);
   await page.locator('.board .cell.legal').first().click();
   await expect(page.locator('.setup-screen .notice')).toContainText('入れ替え');
-  const setupConfirmation = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, confirmFits: document.querySelector('.setup-screen .wide')!.getBoundingClientRect().height >= 44 }));
+  const setupConfirmation = await page.evaluate(() => ({ pageAccessible: document.documentElement.scrollWidth <= innerWidth, confirmFits: document.querySelector('.setup-screen .setup-primary > .primary')!.getBoundingClientRect().height >= 44 }));
   expect(setupConfirmation.pageAccessible).toBe(true);
   expect(setupConfirmation.confirmFits).toBe(true);
   await page.getByRole('button', { name: 'この配置で確定' }).click();

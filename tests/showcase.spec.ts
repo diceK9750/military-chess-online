@@ -8,7 +8,6 @@ import { observeForCpu } from '../src/cpu/observation';
 import { createSavedMatch, advanceSavedMatch, validateSavedMatch, MATCH_STORAGE_KEY, type SavedCpuMatch } from '../src/save/match';
 import { chronicleFrames } from '../src/intelligence/chronicle';
 import { chronicleStory } from '../src/intelligence/chronicleStory';
-import { fullCameraDistance } from '../src/battlefield3d/camera';
 import { sitePoint } from '../src/battlefield3d/state';
 import type { Site } from '../src/game/types';
 test.use({ launchOptions: { args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader'] } });
@@ -42,8 +41,10 @@ async function prepare(page:Page,match:SavedCpuMatch) {
 }
 async function clickSite(page:Page,site:Site) {
   const canvas=page.locator('canvas');await canvas.scrollIntoViewIfNeeded();
-  const b=(await canvas.boundingBox())!,camera=new PerspectiveCamera(42,b.width/b.height,.1,100),d=fullCameraDistance(camera.aspect);
-  camera.position.set(0,d*.86,d*.6);camera.lookAt(0,.25,0);camera.updateMatrixWorld();
+  const b=(await canvas.boundingBox())!,camera=new PerspectiveCamera(42,b.width/b.height,.1,100);
+  const pose=(await canvas.getAttribute('data-camera-pose'))?.split('/').map(Number);
+  expect(pose,'renderer exposes camera position and target').toHaveLength(6);expect(pose!.every(Number.isFinite)).toBe(true);
+  camera.position.set(pose![0],pose![1],pose![2]);camera.lookAt(pose![3],pose![4],pose![5]);camera.updateMatrixWorld();
   const p=sitePoint(site),point=new Vector3(p.x,.2,p.z).project(camera);
   await page.mouse.click(b.x+(point.x+1)*b.width/2,b.y+(1-point.y)*b.height/2);
 }

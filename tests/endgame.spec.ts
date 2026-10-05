@@ -41,7 +41,7 @@ for(const [width,height] of [[1920,1080],[1440,900],[1280,720],[430,932],[390,84
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath('endgame.png'),fullPage:true});
   const saved=await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY);
-  await page.getByRole('button',{name:'直前の手を追う'}).click();
+  await page.getByRole('combobox',{name:'カメラの詳細視点'}).selectOption('last');
   await expect(page.locator('canvas')).toHaveAttribute('data-camera-preset','last');
   await panel.getByRole('button',{name:'戦史再現',exact:true}).click();
   await expect(page.getByLabel('戦史再現',{exact:true})).toBeVisible();await expect(page.getByRole('status',{name:'対局結果'})).toHaveCount(0);
@@ -67,4 +67,41 @@ test('result action exports and reloads the unchanged encrypted terminal match',
   await page.getByRole('button',{name:'読み込んだ対局へ置き換える'}).click();
   await expect(page.getByRole('status',{name:'対局結果'})).toBeVisible();
   expect(JSON.parse((await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY))!).game).toEqual(match.game);
+});
+
+for (const rendering of ['3d', 'fallback'] as const) test(`portrait finished result and actions are not clipped with ${rendering} rendering`, async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  if (rendering === 'fallback') {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...args: unknown[]) {
+        return kind === 'webgl2' ? null : Reflect.apply(original, this, [kind, ...args]);
+      } as typeof original;
+    });
+  }
+  await page.addInitScript(({ key, data }) => localStorage.setItem(key, data), { key: MATCH_STORAGE_KEY, data: JSON.stringify(match) });
+  await page.goto(entry);
+  await page.getByRole('button', { name: /続きから/ }).click();
+  const panel = page.getByRole('status', { name: '対局結果' });
+  if (rendering === 'fallback') {
+    await expect(page.getByRole('alert')).toContainText('二次元盤面で続けられます');
+    await expect(page.locator('.board')).toBeVisible();
+  } else await expect(page.getByRole('img', { name: '操作可能な三次元戦場' })).toBeVisible();
+  // Initial result auto-scroll must expose the entire card, including its final action.
+  await expect(panel).toBeInViewport({ ratio: 1 });
+  const saved = await page.evaluate(key => localStorage.getItem(key), MATCH_STORAGE_KEY);
+  for (const [width, height] of [[320,568], [390,844], [320,568]]) {
+    await page.setViewportSize({ width, height });
+    await panel.scrollIntoViewIfNeeded();
+    await expect(panel).toBeInViewport({ ratio: 1 });
+    for (const name of ['新しい対局', '戦史再現', '結果を保存']) {
+      const action = panel.getByRole('button', { name, exact: true });
+      await expect(action).toBeEnabled();
+      await expect(action).toBeInViewport({ ratio: 1 });
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  expect(await page.evaluate(key => localStorage.getItem(key), MATCH_STORAGE_KEY)).toBe(saved);
 });

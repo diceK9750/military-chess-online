@@ -6,7 +6,7 @@ import { Intelligence, readIntelligence, INTELLIGENCE_KEY } from './Intelligence
 import { tacticalView } from '../intelligence/public';
 import { inferEnemies } from '../intelligence/inference';
 import { defaultPlacement } from '../dev/fixtures';
-import { startGame } from '../game/game';
+import { startGame, applyMove } from '../game/game';
 afterEach(()=>{cleanup();localStorage.clear();});
 const view=()=>tacticalView(startGame(defaultPlacement(1),defaultPlacement(2),1),1);
 test('OFF hides advice, ON shows at most three explanations and never a win probability',()=>{
@@ -21,3 +21,12 @@ test('enemy inspection shows candidate names and public evidence without executi
  fireEvent.click(screen.getByRole('button',{name:`${first.position} · 候補${first.candidates.length}種`}));expect(focus).toHaveBeenCalledWith(first.position);expect(screen.getByRole('status')).toHaveTextContent('候補');expect(screen.queryByRole('button',{name:'確定して実行'})).not.toBeInTheDocument();
 });
 test('preference defaults OFF and uses its own key',()=>{expect(readIntelligence()).toBe(false);localStorage.setItem(INTELLIGENCE_KEY,'true');expect(readIntelligence()).toBe(true);expect(localStorage.getItem('military-chess:cpu-match:v1')).toBeNull();});
+
+test('terminal public CPU explanation never claims the CPU is still thinking',()=>{
+ const start=startGame(defaultPlacement(1),defaultPlacement(2),2);
+ const first=tacticalView(start,2).legalMoves[0];
+ const played=applyMove(start,first);
+ const ended=tacticalView({...played,turn:null,result:{winner:1,reason:'HQ_CAPTURE'}},1);
+ render(<Intelligence view={ended} enabled onToggle={vi.fn()} hypotheses={[]} focus={null} onFocus={vi.fn()}/>);
+ expect(screen.getByLabelText('CPU判断の公開理由')).not.toHaveTextContent('思考中');
+});

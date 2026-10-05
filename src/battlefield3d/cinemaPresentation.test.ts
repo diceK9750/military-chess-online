@@ -13,3 +13,14 @@ test('director shots are determined by actual scene facts only',()=>{
  expect(cinemaShot(ordinary,0)).toBe('opening');expect(cinemaShot(ordinary,4)).toBe('march');
  for(const [kind,shot] of [['contact','battle'],['breakthrough','breach'],['pressure','pressure'],['loss','battle'],['decisive','decisive'],['summary','summary']] as const)expect(cinemaShot({...ordinary,kinds:[kind]},20)).toBe(shot);
 });
+test('every formal battle receives an action shot even after the first-contact chapter',()=>{
+ expect(cinemaShot(ordinary,28,true)).toBe('battle');
+ expect(cinemaShot({...ordinary,kinds:['decisive']},28,true)).toBe('decisive');
+ expect(cinemaShot({...ordinary,kinds:['summary']},28,false)).toBe('summary');
+});
+test('invalid speeds cannot cause infinite or negative film timers',()=>{
+ for(const speed of [0,-1,NaN,Infinity]){
+  expect(cinemaTiming(speed,true)).toEqual(cinemaTiming(1,true));
+  expect(cinemaDelay(ordinary,speed,true,true)).toBe(cinemaDelay(ordinary,1,true,true));
+ }
+});

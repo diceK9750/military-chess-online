@@ -348,3 +348,110 @@
 .piece-legend strong,.piece-legend span {display:block}
 .piece-legend span {font-size:12px}
 @media(max-width:600px){.formation-library {padding:8px}.formation-help {align-items:flex-start}.formation-preview {max-width:35%}.next-action {font-size:13px}.piece-legend {grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Mobile command viewport: canvas first, touch-safe essentials below, detail below the fold. */
+.battlefield-viewport { display:flex; flex-direction:column; min-width:0; }
+.battlefield-viewport > .battlefield-hq { position:static; padding:0 8px 4px; flex-shrink:0; }
+.battlefield-hq span { flex:1; min-width:0; }
+.battlefield-panel > .battlefield-last { position:static; margin:6px; }
+.battlefield-cameras { display:grid; grid-template-columns:auto auto minmax(90px,1fr) auto; flex-wrap:nowrap; align-items:center; gap:4px; padding:5px 8px; }
+.battlefield-cameras button { min-width:0; min-height:44px; padding:5px 7px; white-space:nowrap; }
+.camera-select { display:flex; gap:4px; align-items:center; font-size:11px; min-width:0; }
+.camera-select select { display:block; width:100%; min-width:0; min-height:44px; margin:0; padding:4px; color:#f8f0dc; background:#283e42; font-size:12px; }
+.battlefield-primary { padding:4px 8px 7px; background:#102b32; border-top:1px solid #6b827c; }
+.battlefield-primary .battlefield-selection { padding:0 0 4px; min-height:24px; font-weight:bold; }
+.battlefield-primary .confirm, .battlefield-primary .move-prompt, .battlefield-primary .selection-panel { margin:0; color:#eff7ef; background:transparent; border:0; padding:0; }
+.battlefield-primary .confirm h3 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.battlefield-primary .confirm > p:not(.battle-warning) { display:none; }
+.battlefield-primary .confirm .battle-warning { font-size:12px; margin:0 0 4px; padding:3px 6px; color:#ffe7b1; background:#4d3425; }
+.battlefield-primary .confirm .actions { display:grid; grid-template-columns:1fr 1fr 1.3fr; gap:5px; }
+.battlefield-primary button, .battlefield-primary .confirm .actions button { min-height:44px; min-width:0; padding:5px 7px; font-size:12px; }
+.battlefield-primary .primary { background:#efd181; color:#142e33; margin:0; }
+.battlefield-primary .confirm fieldset { display:flex; align-items:center; gap:12px; margin:0 0 4px; padding:0 8px; min-width:0; border-color:#70817a; }
+.battlefield-primary .confirm fieldset legend { font-size:11px; }
+.battlefield-primary .confirm fieldset label { display:flex; align-items:center; gap:6px; min-height:40px; font-size:12px; }
+.battlefield-primary .confirm fieldset input { margin:0; }
+.battlefield-primary .move-prompt .notice { margin:0; padding:0; font-size:12px; }
+.battlefield-primary .selection-panel strong { font-size:12px; }
+.setup-primary { display:flex; align-items:center; gap:8px; }
+.setup-primary > .selection-panel { flex:1; }
+.setup-primary > .primary { margin-left:auto; flex-shrink:0; }
+.battlefield-overview { position:absolute; z-index:1; right:6px; bottom:6px; width:76px; padding:3px; border:1px solid #9eb8a4; border-radius:6px; background:#10242cf0; pointer-events:none; color:#e0eee5; }
+.battlefield-overview svg { display:block; width:100%; height:86px; }
+.battlefield-overview small { display:block; font-size:8px; line-height:1.25; text-align:center; }
+.audio-controls { padding:8px 0; }
+@media (max-width:600px) and (orientation:portrait) {
+  .app-shell--setup, .app-shell--playing { padding-left:max(5px,env(safe-area-inset-left)); padding-right:max(5px,env(safe-area-inset-right)); padding-top:env(safe-area-inset-top); }
+  .app-shell--setup > header, .app-shell--playing > header { padding:3px 5px; min-height:42px; height:42px; }
+  .app-shell--setup .brand-mark, .app-shell--playing .brand-mark { width:28px; height:32px; font-size:18px; }
+  .app-shell--setup .brand, .app-shell--playing .brand { font-size:14px; }
+  .app-shell--setup .brand small, .app-shell--playing .brand small { display:none; }
+  .app-shell--setup > main, .app-shell--playing > main { padding:0; }
+  .app-shell--setup .section-heading, .app-shell--playing .section-heading { height:31px; padding:2px 6px; gap:5px; }
+  .app-shell--setup .section-heading h2, .app-shell--playing .section-heading h2 { font-size:15px; margin:0; }
+  .app-shell--setup .section-heading .eyebrow, .app-shell--playing .section-heading .eyebrow { display:none; }
+  .app-shell--setup .badge, .app-shell--playing .badge { font-size:11px; padding:1px 8px; }
+  .setup-layout, .play-layout { margin:0; gap:0; }
+  .battlefield-panel { border-radius:7px; }
+  .battlefield-viewport { height:calc(var(--battlefield-height, 100dvh - 76px) - env(safe-area-inset-bottom)); min-height:430px; padding-bottom:2px; }
+  .battlefield-panel:has(.command-deck) .battlefield-viewport > .battlefield-stage { flex:1 1 0; min-height:120px; height:auto; }
+  .battlefield-header { min-height:27px; padding:2px 7px; flex-shrink:0; }
+  .battlefield-header strong, .battlefield-turn { font-size:11px; }
+  .battlefield-turn { padding:1px 5px; }
+  .battlefield-viewport > .battlefield-hq { padding:0 5px 3px; gap:5px; }
+  .battlefield-hq span { flex-direction:row; align-items:center; gap:4px; padding:2px 4px; font-size:10px; line-height:1.3; }
+  .battlefield-hq small { font-size:9px; }
+  .battlefield-cameras { padding:4px 5px; gap:4px; }
+  .battlefield-cameras button { font-size:10px; padding:3px 5px; }
+  .camera-select { font-size:0; gap:0; }
+  .camera-select select { font-size:11px; }
+  .battlefield-primary { padding:3px 5px 5px; }
+  .battlefield-primary .battlefield-selection { font-size:11px; line-height:1.4; }
+  .battlefield-primary .move-prompt .notice { font-size:11px; line-height:1.3; }
+  .battlefield-primary .setup-primary .selection-panel strong { display:none; }
+  .battlefield-primary .setup-primary .selection-panel { flex:0 0 auto; }
+  .battlefield-primary .setup-primary > .primary { flex:1; }
+  .battlefield-lanes { display:none; } /* The primary confirmation retains its accessible C/D radios. */
+  .battlefield-error .battlefield-viewport { height:auto; min-height:0; }
+  .battlefield-error .battlefield-viewport > .battlefield-stage:not(:has(.battlefield-result)) { flex:0 0 45px !important; min-height:45px !important; }
+  .battlefield-error .battlefield-primary { display:none; }
+  .chronicle { padding:0; border:0; }
+  .chronicle-heading h3 { font-size:15px; margin:2px 5px; }
+  .chronicle-heading p, .chronicle-heading small { display:none; }
+  .chronicle-event { margin:2px 5px; font-size:11px; }
+  .chronicle .battlefield-primary .battlefield-selection { display:none; }
+  .chronicle .chronicle-controls { margin:0; padding:0; border:0; display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:4px; }
+  .chronicle .chronicle-controls label { display:flex; align-items:center; gap:4px; grid-column:1 / 3; }
+  .chronicle .chronicle-controls label select { width:auto; margin:0; }
+  .chronicle .chronicle-controls span { font-size:10px; }
+  .chronicle .chronicle-slider { font-size:11px; gap:6px; }
+  .chronicle .chronicle-slider input { min-height:30px; margin:0; }
+}
+.cinema-cue { margin:0 0 4px; font-size:12px; font-weight:bold; color:#ffe3a6; }
+.battlefield-primary .chronicle-controls label, .battlefield-primary .chronicle-controls span { color:#eff7ef; }
+@media (max-width:600px) and (orientation:portrait) {
+  .chronicle .cinema-cue { font-size:11px; }
+  .chronicle .chronicle-controls select { min-height:36px; padding:3px; }
+}
+/* Keep the overview off the canvas so it cannot cover a legal destination. */
+.battlefield-primary.has-overview { position:relative; padding-right:76px; min-height:94px; }
+.battlefield-primary .battlefield-overview { top:4px; bottom:auto; right:5px; width:63px; }
+.battlefield-primary .battlefield-overview svg { height:66px; }
+@media (max-width:600px) and (orientation:portrait) {
+  .battlefield-primary.has-overview { padding-right:66px; min-height:88px; }
+  .battlefield-primary .battlefield-overview { width:55px; }
+  .battlefield-primary .battlefield-overview svg { height:60px; }
+}
+.battlefield-primary .move-prompt .notice { background:transparent; color:inherit; }
+
+.battlefield-primary .confirm fieldset legend { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+
+/* Terminal actions must grow with their text instead of being clipped by the live-play budget. */
+@media (max-width:600px) and (orientation:portrait) {
+  .battlefield-viewport:has(.battlefield-result) { height:auto; min-height:0; }
+  .battlefield-panel:has(.command-deck) .battlefield-viewport > .battlefield-stage:has(.battlefield-result) { flex:0 0 auto; height:auto; min-height:380px; overflow:visible; padding:8px; }
+  .battlefield-viewport .battlefield-stage .battlefield-result { position:relative; left:auto; bottom:auto; transform:none; width:auto; max-width:none; margin:0; }
+  .battlefield-stage:has(.battlefield-result) > canvas { position:absolute; inset:0; }
+  .battlefield-error .battlefield-viewport > .battlefield-stage:has(.battlefield-result) { min-height:0; padding-top:45px; }
+  .battlefield-error .battlefield-stage:has(.battlefield-result) > .battlefield-status { inset:0 0 auto; height:45px; padding:5px; font-size:11px; }
+}
