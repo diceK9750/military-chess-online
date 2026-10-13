@@ -6,6 +6,7 @@ import type { BattlefieldRenderer } from './renderer';
 import type { BattlefieldPiece, BattlefieldViewState } from './state';
 import { defaultPlacement } from '../dev/fixtures';
 import { cinemaTiming } from './cinemaPresentation';
+import { cinemaRoute, cinemaRoutePoint } from './cinemaDirector';
 
 const rendered = vi.hoisted(() => ({ scene: null as THREE.Scene | null, camera: null as THREE.PerspectiveCamera | null, render: vi.fn(), dispose: vi.fn() }));
 vi.mock('./backend', () => ({ createBackend: async () => {
@@ -50,7 +51,18 @@ function expectSnapshot(expected: readonly BattlefieldPiece[]) { expect(pieces()
 test('the first rendered frame contains the exact complete historical deployment and then idles', async () => {
   const deployment = [...defaultPlacement(1), ...defaultPlacement(2)].map(p => ({ owner: p.owner, position: p.position!, unknown: false as const, type: p.type }));
   const initial = state(deployment), canvas = await mount(initial); expectSnapshot(deployment); expect(canvas.dataset.unitCount).toBe('46'); expect(canvas.dataset.renderedSquads).toBe('46'); expect(canvas.dataset.shot).toBe('opening'); expect(queue.size).toBe(0);
+  const pbrBatches: THREE.InstancedMesh[] = []; rendered.scene!.traverse(o => { if (o instanceof THREE.InstancedMesh && o.material instanceof THREE.MeshStandardMaterial) pbrBatches.push(o); }); expect(pbrBatches.length).toBeGreaterThan(0);
   const calls = rendered.render.mock.calls.length; frame(8000); expect(rendered.render).toHaveBeenCalledTimes(calls); expect(initial.pieces).toEqual(deployment);
+});
+test('the moving route marker follows the recorded HQ lane and settles without changing the piece count', async () => {
+  const mover = piece(1, 'HQ-P1'), before = state([mover]);
+  const next = { ...before, moveCount: 1, pieces: [{ ...mover, position: 'HQ-P2' as const }], lastMove: { from: 'HQ-P1' as const, to: 'HQ-P2' as const, actor: 1 as const, lane: 'D' as const }, cinematic: { ...before.cinematic!, shot: 'march' as const } };
+  const canvas = await mount(before); renderer!.update(next); frame(600);
+  const tracer = rendered.scene!.getObjectByName('historical-route-tracer') as THREE.Mesh;
+  const expected = cinemaRoutePoint(cinemaRoute(next.lastMove!), .5);
+  expect(tracer.position.x).toBeCloseTo(expected.x, 5); expect(tracer.position.z).toBeCloseTo(expected.z, 5);
+  expect(tracer.position.x).toBeCloseTo(.5, 5); expect(canvas.dataset.routeProgress).toBe('0.500');
+  frame(1451); expect(tracer.visible).toBe(false); expect(canvas.dataset.routeProgress).toBeUndefined(); expect(canvas.dataset.unitCount).toBe('1'); expectSnapshot(next.pieces);
 });
 test.each(['ATTACKER', 'DEFENDER', 'MUTUAL'] as const)('%s battle retains both real actors through contact and settles to the exact survivor count', async outcome => {
   const { before, next } = conflict(outcome), canvas = await mount(before); renderer!.update(next); frame(1500);
@@ -79,16 +91,35 @@ test('manual top view survives resize and quality changes even after its grace p
 });
 test('reduced motion gives the exact static frame, including when preference changes mid-contact', async () => {
   const { before, next } = conflict('ATTACKER'); reduced = true; const canvas = await mount(before); renderer!.update(next); frame(100); expectSnapshot(next.pieces); expect(canvas.dataset.battleEffect).toBeUndefined(); expect(queue.size).toBe(0);
-  reduced = false; renderer!.update(before); frame(200); renderer!.update(next); frame(1700); expect(canvas.dataset.battlePhase).toBe('contact'); reduced = true; motion(); frame(1701); expectSnapshot(next.pieces); expect(queue.size).toBe(0); expect(canvas.dataset.battleEffect).toBeUndefined();
+  reduced = false; renderer!.update(before); frame(200); renderer!.update(next); frame(1700); expect(canvas.dataset.battlePhase).toBe('contact'); reduced = true; motion(); frame(1701); expectSnapshot(next.pieces); expect(queue.size).toBe(0); expect(canvas.dataset.battleEffect).toBeUndefined(); expect(canvas.dataset.routeProgress).toBeUndefined(); expect(rendered.scene!.getObjectByName('historical-route-tracer')?.visible).toBe(false); expect(rendered.scene!.getObjectByName('historical-route-pulse')?.visible).toBe(false);
 });
 test('decisive animation reaches the final global summary before autoplay pauses', async () => {
   const { before, next } = conflict('ATTACKER'), final = { ...next, cinematic: { ...next.cinematic, shot: 'decisive' as const, ending: true, speed: 2 } }, canvas = await mount(before); renderer!.update(final); frame(1600); expect(canvas.dataset.battlePhase).toBe('contact');
   const t = cinemaTiming(2, true, true); frame(t.march + t.clash + t.exit + 1); renderer!.update({ ...final, cinematic: { ...final.cinematic, playing: false } }); frame(3000); expectSnapshot(final.pieces); expect(canvas.dataset.shot).toBe('summary'); expect(queue.size).toBe(0);
 });
+test('hidden tabs freeze the cinematic clock and resume from the same route position', async () => {
+  const mover = piece(1, 'HQ-P1'), before = state([mover]);
+  const next = { ...before, moveCount: 1, pieces: [{ ...mover, position: 'HQ-P2' as const }], lastMove: { from: 'HQ-P1' as const, to: 'HQ-P2' as const, actor: 1 as const, lane: 'D' as const }, cinematic: { ...before.cinematic!, shot: 'march' as const } };
+  const original = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+  try {
+    const canvas = await mount(before); renderer!.update(next); frame(600);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange'));
+    frame(5000); expect(canvas.dataset.routeProgress).toBe('0.500');
+    now = 10000; Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange'));
+    frame(10001); expect(canvas.dataset.routeProgress).toBe('0.501');
+    frame(10851); expect(canvas.dataset.routeProgress).toBeUndefined(); expectSnapshot(next.pieces);
+  } finally { if (original) Object.defineProperty(document, 'visibilityState', original); else Reflect.deleteProperty(document, 'visibilityState'); }
+});
 test('unknown or unfinished sources never reach the rendering backend', async () => {
   const bad = state([{ owner: 2, position: 'B5', unknown: true }]); await expect(mount(bad)).rejects.toThrow(); expect(rendered.render).not.toHaveBeenCalled();
 });
 
+test('disposing an active cinematic cancels its frame and releases renderer resources', async () => {
+  const geometryDispose = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose'), materialDispose = vi.spyOn(THREE.Material.prototype, 'dispose'), textureDispose = vi.spyOn(THREE.Texture.prototype, 'dispose');
+  const canvas = await mount(state([piece(1, 'B4')])); renderer!.update({ ...state([piece(1, 'B5')], 1), lastMove: { from: 'B4' as const, to: 'B5' as const, actor: 1 as const }, cinematic: { ...state([piece(1, 'B4')]).cinematic!, shot: 'march' as const } });
+  expect(queue.size).toBeGreaterThan(0); renderer!.dispose();
+  expect(queue.size).toBe(0); expect(canvas.isConnected).toBe(false); expect(rendered.dispose).toHaveBeenCalledOnce(); expect(geometryDispose).toHaveBeenCalled(); expect(materialDispose).toHaveBeenCalled(); expect(textureDispose).toHaveBeenCalled();
+});
 test('the toolbar follows manual, directed action and final whole-board views', async () => {
   const { before, next } = conflict('ATTACKER'); await mount(before); renderer!.setCamera!('enemy'); frame(1); expect(cameraChanges).toHaveBeenLastCalledWith('enemy');
   now = 4000; renderer!.update(next); frame(5500); expect(cameraChanges).toHaveBeenLastCalledWith('last'); frame(6800); expect(cameraChanges).toHaveBeenLastCalledWith('full');
@@ -111,3 +142,9 @@ test.each([320, 390, 1280])('initial unit nameplates stay inside the actual %s-p
     const top = o.localToWorld(new THREE.Vector3(0, .5, 0)).project(camera), bottom = o.localToWorld(new THREE.Vector3(0, -.5, 0)).project(camera); expect(Math.abs(top.y - bottom.y) * height / 2).toBeGreaterThan(10);
   });
 });
+
+
+
+
+
+

@@ -1,0 +1,45 @@
+# 軍人将棋 クラウド別コピー改良・検証
+
+## 判定
+実装・単体試験・型検査・ビルドまで完了。実ブラウザ検証は実行環境の制限で未完了です。公開前にPlaywrightと画面確認が必要です。
+
+## 由来と保全
+- リポジトリ: https://github.com/diceK9750/military-chess-online
+- 開始main/終了main/ローカルHEAD: `38c606303ea85a65107e6285eb207630dd493706`
+- 開始・終了時ともGitHub mainは既知SHAと一致。開始作業ツリーはclean。
+- 終了時は未コミットの別コピー。commit・push・PR・公開・課金なし。ユーザーPCおよび元ファイルへの変更なし。
+- Node v24.19.0 / npm 11.9.0。依存は既存package-lock.json固定、変更なし。
+- リポジトリ内にAGENTS.md/.agents/skillsなし。READMEと対象実装・既存試験を参照。
+
+## 変更
+1. 対局中に折りたたみ式「自軍の駒から選ぶ」。PieceFaceと所在地点を表示し既存select(site)を使用。CPU手番・演出中・終局時はロック。自軍の盤上駒だけを列挙し、敵情報・除去済み駒を含めません。配置画面は変更なし。
+2. 駒凡例に既存16種類のアイコン・正式名と階級印。identity()/officerLook()の既存ルールで将官/佐官/尉官と3/2/1を区別。CSSを限定しアイコンを縮小しません。追加canvas/新規AI画像なし。
+3. CPU計算失敗の手動再試行。元の局面・難易度・乱数種を維持し、自動失敗ループなし。連打・アンマウント・StrictMode・再失敗を試験。着手成功後の通知例外は別エラーとし、着手を再実行しません。
+4. 関連Vitest 12件、Playwright 3ケース×2プロジェクトを追加。README操作説明。
+
+## 検証結果（今回実行）
+- 変更前main: `npm test`、34ファイル/883件成功。変更前のtypecheck/build/E2Eは未実行。
+- 変更後関連: LocalGame assistance 9件、PieceLegend 3件成功。既存UI30件と初版関連7件も成功。
+- 最終 `npm run check`: typecheck成功 → Vitest36ファイル/895件成功 → build成功 → E2E起動失敗で終了コード1。
+- E2E全166件はすべてブラウザ実行ファイルがないため起動前に停止。ゲーム操作の166件が失敗したという意味ではありません。
+- Playwright Chromiumの正規取得: ダウンロードが0 MiB ZIPとなり解凍不能。
+- 既存システムChromium 154.0.8037.57を使った追加6件: browser processの `socket() failed: Operation not permitted` で起動前停止。正規の許可付き実行でも同じ結果。
+- `git diff --check` 成功。別担当の静的レビューで必須修正指摘なし。
+- 一時的な凡例CSS試験の失敗は作業中のCSS更新が原因で解消済み。最終895件で再確認済み。
+
+## 未検証・残る注意
+- 正常3D/WebGL2、非常用2D、保存再開、終局、連打、CPU再試行の実ブラウザ操作は未検証（試験コードは同梱）。
+- スクリーンショット・実スマートフォンの指操作・WebGPU・GPU描画品質・音/発熱は未確認。
+- 稼働確認した試遊URLはありません。公開していません。
+- ビルド時の500 kB超チャンク警告は残っています。今回バンドル分割は変更していません。
+
+## 再検証
+Node >=22.12で `npm ci`、`npx playwright install chromium`、`npm run check`。
+新規ブラウザ項目のみは `npm run test:e2e -- tests/assistance.spec.ts`。
+ブラウザ起動が可能な環境で全checkと画面確認を完了してから、適用・公開について別途判断してください。
+
+## 同梱
+- source/: 改良後のソース一式（.git/node_modules/dist/テスト実行残骸を除外）
+- changes.patch: 既知mainとの差分、新規テスト・本報告を含む
+- validation/: 変更前単体試験・最終check・関連試験・ブラウザ起動障害ログ
+- SHA256SUMS.json: 同梱各ファイルのハッシュ

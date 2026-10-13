@@ -85,7 +85,9 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   let focusAfterDrag = false;
   function geometry<T extends THREE.BufferGeometry>(value: T): T { geometries.add(value); return value; }
   function material(color: string) {
-    const value = new THREE.MeshLambertMaterial({ color, flatShading: true }); materials.add(value); return value;
+    // A compact stylized PBR palette gives enamel, cloth and metal different light response
+    // without introducing texture downloads or changing any piece silhouettes/rules.
+    const value = new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.08, flatShading: true }); materials.add(value); return value;
   }
   function mesh(shape: THREE.BufferGeometry, surface: THREE.Material, x: number, y: number, z: number, group: THREE.Object3D = scene) {
     const object = new THREE.Mesh(shape, surface); object.position.set(x, y, z); group.add(object); return object;
@@ -117,7 +119,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const moving = animateFrame?.(now) ?? false;
         const effects = effectsFrame?.(now) ?? false;
         const active = moving || effects;
-        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar(Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12)) * (label.userData.focusScale ?? 1));});
+        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar((label.userData.privacyStable ? 1 : Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12))) * (label.userData.focusScale ?? 1));});
         canvas.dataset.cameraPose = camera.position.toArray().join('/') + '/' + controls.target.toArray().join('/');
         renderer.render(scene, camera);
         if (!moving) animateFrame=undefined;
@@ -322,7 +324,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const equipment = geometry(new THREE.BoxGeometry(.34, .08, .12));
     const skin = material('#d9c8a7'), dark = material('#273a40'), brass = material('#d8b85e');
     const shape = new THREE.Shape(); shape.moveTo(-.36, -.36); shape.lineTo(.36, -.36); shape.lineTo(.39, .16); shape.lineTo(0, .49); shape.lineTo(-.39, .16); shape.closePath();
-    const badge = geometry(new THREE.ExtrudeGeometry(shape, { depth: .14, bevelEnabled: false })); badge.rotateX(-Math.PI / 2);
+    const badge = geometry(new THREE.ExtrudeGeometry(shape, { depth: .14, bevelEnabled: true, bevelThickness: .025, bevelSize: .025, bevelSegments: 2 })); badge.rotateX(-Math.PI / 2);
     const baseWood = material('#b08b58');
     const baseName = geometry(new THREE.PlaneGeometry(.54, .18));
     const armor = geometry(new THREE.BoxGeometry(.4, .33, .24));
@@ -479,7 +481,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const engraving = mesh(baseName, label(text, '#2b251d', '#c8a779', true), x, .223, z + .22, group); engraving.rotation.x = -Math.PI / 2; engraving.userData = { site: piece.position };
         const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, Math.max(1.14,1.2*stature), z, group);
         plaque.renderOrder=5;
-        plaque.userData = { site: piece.position, ...(selectedPiece ? {focusScale:1.12} : {}) }; billboards.push(plaque);
+        plaque.userData = { site: piece.position, ...(selectedPiece ? {focusScale:1.12} : {}), ...(piece.unknown ? {privacyStable:true} : {}) }; billboards.push(plaque);
       }
       units.add(moving);
       if (transition && movingPiece && !reducedMotion.matches) {
@@ -627,3 +629,4 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       capture:async()=>{if(disposed)throw new Error('戦場は閉じられています');if(backend.kind==='webgpu'&&renderer.renderAsync)await renderer.renderAsync(scene,camera);else renderer.render(scene,camera);const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;const context=copy.getContext('2d');if(!context)throw new Error('画像を作成できません');context.drawImage(canvas,0,0);return copy;} };
   } catch (error) { dispose(); throw error; }
 }
+

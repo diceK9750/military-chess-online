@@ -251,6 +251,7 @@
   .battlefield-panel:has(.command-deck) .battlefield-stage { height:520px; }
 }
 .chronicle-event { margin:8px 0; padding:8px 10px; background:#30484a; border-left:3px solid #f7d57a; font-size:14px; }
+.chronicle-provenance { margin:4px 0 8px; padding:6px 10px; color:#d8e4dc; background:#1d3438; border:1px solid #58716b; border-radius:4px; font-size:12px; letter-spacing:.02em; }
 .chronicle-commentary { margin:8px 0; padding:12px 16px; border:1px solid #b9a16c; border-radius:8px; background:#f6efdc; color:#18343a; line-height:1.65; }
 .chronicle-commentary small { font-size:11px; font-weight:bold; }
 .chronicle-commentary h4 { margin:3px 0; font-size:20px; }
@@ -344,9 +345,17 @@
 .setup-ready {padding:8px;background:#e8f4eb;color:#245b42;font-weight:bold}
 .chronicle .battlefield-key {display:block}
 .piece-legend {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;padding:8px}
-.piece-legend div {padding:6px;border:1px solid #69807c;border-radius:5px}
-.piece-legend strong,.piece-legend span {display:block}
-.piece-legend span {font-size:12px}
+.piece-legend > .piece-legend-entry {min-width:0;padding:8px;border:1px solid #69807c;border-radius:5px}
+.piece-legend-entry > strong {display:block;margin-bottom:5px}
+.piece-legend .piece-face {display:flex;flex-direction:row;justify-content:flex-start;gap:7px;text-align:left;white-space:normal}
+.piece-legend .piece-face .piece-icon {flex-shrink:0;font-size:24px;line-height:1.2}
+.piece-legend .piece-face .piece-name {font-size:14px;line-height:1.4;letter-spacing:0}
+.piece-legend-insignia {display:flex;align-items:center;flex-wrap:wrap;gap:3px 6px;margin-bottom:4px;font-size:12px;line-height:1.5}
+.piece-legend-insignia--gold {color:#efd181}
+.piece-legend-insignia--silver {color:#cfd9df}
+.piece-legend-insignia--pale {color:#9ce3ef}
+.piece-legend-marks {font-size:16px;line-height:1.2;letter-spacing:2px}
+.piece-legend-hint {display:block;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:600px){.formation-library {padding:8px}.formation-help {align-items:flex-start}.formation-preview {max-width:35%}.next-action {font-size:13px}.piece-legend {grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* Mobile command viewport: canvas first, touch-safe essentials below, detail below the fold. */

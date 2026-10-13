@@ -12,6 +12,8 @@ import { Setup } from './Setup';
 import { defaultPlacement } from '../dev/fixtures';
 import { generateFormationPlacement } from '../formation/templates';
 import { applyMove, startGame } from '../game/game';
+import { chooseCpuMove } from '../cpu/strategy';
+import { observeForCpu } from '../cpu/observation';
 import { createSavedMatch, MATCH_STORAGE_KEY, SETUP_STORAGE_KEY, storeSavedMatch } from '../save/match';
 import { ExportPanel, ImportPanel } from './SaveFilePanels';
 
@@ -349,6 +351,24 @@ test('invalid destination keeps selection, confirmation names own piece, and can
   expect(screen.getByRole('button', { name: 'C7 P1 大将' })).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('Enter and Space activate native board and confirmation buttons once', async () => {
+  const onChange = vi.fn(), user = userEvent.setup();
+  const { container } = render(<LocalGame initial={scenario('capture')} onChange={onChange} />);
+  await waitFor(() => expect(document.querySelector('.board')).not.toBeNull());
+  const origin = container.querySelector<HTMLButtonElement>('.board .cell[data-site="C7"]')!;
+  origin.focus(); await user.keyboard('{Enter}');
+  expect(origin).toHaveAttribute('aria-pressed', 'true');
+  const target = container.querySelector<HTMLButtonElement>('.board .cell.legal')!;
+  target.focus(); await user.keyboard(' ');
+  expect(container.querySelector('.confirm')).toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+  const execute = container.querySelector<HTMLButtonElement>('.confirm .primary')!;
+  execute.focus(); await user.keyboard('{Enter}');
+  expect(onChange).toHaveBeenCalledOnce();
+  expect(onChange.mock.calls[0][0].moveCount).toBe(1);
+  expect(document.querySelector('.game-screen h2')).toHaveFocus();
+});
+
 test('CPU thinking locks board and public move text never names its piece', async () => {
   const game = scenario('aircraft');
   const { container } = render(<LocalGame initial={{ ...game, turn: 2 }} mode="cpu" cpuSeed={2} />);
@@ -373,6 +393,18 @@ test('auto PASS and a finished CPU match explain result and reveal postgame posi
   expect(screen.getByText('終局後の全駒・初期配置・戦闘を確認')).toBeInTheDocument();
 });
 
+test('closing the postgame chronicle restores focus to the game screen', async () => {
+  const initial = { p1: defaultPlacement(1), p2: defaultPlacement(2) };
+  let ended = startGame(initial.p1, initial.p2, 1);
+  for (let seed = 0; seed < 1000 && !ended.result; seed++) ended = applyMove(ended, chooseCpuMove(observeForCpu(ended, ended.turn!), 'normal', 9750 + seed)!);
+  const user = userEvent.setup();
+  render(<LocalGame initial={ended} mode="cpu" initialPlacements={initial} />);
+  const open = document.querySelector<HTMLButtonElement>('.battlefield-result .actions button:nth-of-type(1)')!;
+  await user.click(open); await waitFor(() => expect(document.querySelector('.chronicle')).not.toBeNull());
+  const close = document.querySelector<HTMLButtonElement>('.chronicle .command-deck .actions button.secondary')!;
+  await user.click(close);
+  expect(document.querySelector('.game-screen h2')).toHaveFocus();
+});
 test('home dialogue receives focus and Escape cancels replacement', async () => {
   storeSavedMatch(createSavedMatch(startGame(defaultPlacement(1), defaultPlacement(2), 1), 'easy', 7));
   render(<App />); const user = userEvent.setup();
@@ -410,3 +442,6 @@ test.each([
   expect(screen.getByText(label)).toBeInTheDocument();
   expect(screen.getByText(`終局理由：${result.reason === 'HQ_CAPTURE' ? 'コンピューターがあなたの司令部を占領' : '戦闘なし50手'}`)).toBeInTheDocument();
 });
+
+
+

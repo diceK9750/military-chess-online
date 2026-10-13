@@ -7,7 +7,7 @@ import {qualityProfile} from './settings';
 import {PIECES} from '../game/pieces';
 import {identity} from './identity';
 import {addOfficerRegalia,officerLook} from './regalia';
-import {cinemaPose,cinemaManualPose,cinemaRetime,cinemaRoute,cinemaRoutePoint,type CinemaPose} from './cinemaDirector';
+import {CINEMA_BRIDGE_TOP,cinemaGroundHeight,cinemaPose,cinemaManualPose,cinemaRetime,cinemaRoute,cinemaRouteDirection,cinemaRoutePoint,type CinemaPose} from './cinemaDirector';
 
 import {cinemaTiming} from './cinemaPresentation';
 /** Dedicated terrain and squads. Receives only a finished-source, allowlisted display adapter. */
@@ -18,33 +18,47 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
  const scene=new THREE.Scene();scene.background=new THREE.Color('#263d43');scene.fog=new THREE.Fog('#263d43',32,100);
  const camera=new THREE.PerspectiveCamera(42,1,.1,150),target=new THREE.Vector3(0,.3,0);
  const terrain=new THREE.Group(),units=new THREE.Group(),effects=new THREE.Group(),routes=new THREE.Group();scene.add(terrain,units,effects,routes);
- scene.add(new THREE.HemisphereLight('#fff1d0','#385a49',2.7));const sun=new THREE.DirectionalLight('#ffe9be',2.5);sun.position.set(-5,12,7);scene.add(sun);
+ scene.add(new THREE.HemisphereLight('#fff1d0','#385a49',2.2));const sun=new THREE.DirectionalLight('#ffe9be',3);sun.position.set(-5,12,7);scene.add(sun);
  const geometries=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>(),textures=new Set<THREE.Texture>();
  const geo=<T extends THREE.BufferGeometry>(g:T)=>{geometries.add(g);return g;};
- const mat=(c:string)=>{const m=new THREE.MeshLambertMaterial({color:c,flatShading:true});materials.add(m);return m;};
+ const mat=(c:string)=>{const metallic=['#e4c060','#cbd9d8','#9bcdd4','#e4b352'].includes(c.toLowerCase());const m=new THREE.MeshStandardMaterial({color:c,roughness:metallic?.34:.78,metalness:metallic?.42:.06,flatShading:true});materials.add(m);return m;};
  const box=geo(new THREE.BoxGeometry(1,1,1)),cylinder=geo(new THREE.CylinderGeometry(.5,.5,1,6)),cone=geo(new THREE.ConeGeometry(.5,1,6)),head=geo(new THREE.IcosahedronGeometry(.5,0)),plane=geo(new THREE.PlaneGeometry(1,1));
  const soil=mat('#887552'),grass=mat('#73845c'),road=mat('#b49a70'),wood=mat('#604731'),river=mat('#537f87'),blue=mat('#477aa0'),red=mat('#9b4d43'),skin=mat('#d4c4a4'),dark=mat('#263232'),gold=mat('#e4c060'),silver=mat('#cbd9d8'),pale=mat('#9bcdd4'),amber=mat('#e4b352'),olive=mat('#626e48');
  function mesh(g:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,sx:number,sy:number,sz:number,parent:THREE.Object3D){const o=new THREE.Mesh(g,m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);parent.add(o);return o;}
  const textCache=new Map<string,THREE.MeshBasicMaterial>(),labels:THREE.Object3D[]=[];
  function text(value:string,tone='plain'){const key=tone+value;if(textCache.has(key))return textCache.get(key)!;const c=document.createElement('canvas');c.width=Math.max(144,value.length*56+32);c.height=96;const x=c.getContext('2d')!;x.fillStyle=tone==='general'?'#e4c060':tone==='colonel'?'#cbd9d8':'#162e34e8';x.fillRect(0,0,c.width,96);x.fillStyle=tone==='plain'?'#fff1c7':'#192f33';x.font='bold 56px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(value,c.width/2,50,c.width-20);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;textures.add(t);const m=new THREE.MeshBasicMaterial({map:t,transparent:true,depthTest:false,depthWrite:false});materials.add(m);textCache.set(key,m);return m;}
  function sign(value:string,x:number,y:number,z:number,width:number,parent:THREE.Object3D){const label=text(value),o=mesh(plane,label,x,y,z,width,width*96/(label.map!.image as HTMLCanvasElement).width,1,parent);o.renderOrder=10;labels.push(o);return o;}
- mesh(box,soil,0,-.3,0,12,.5,13,terrain);mesh(box,grass,0,-.08,0,7,.12,9,terrain);
+ // A layered terrain plinth and low ridgelines frame the recorded board without changing
+ // its sites, elevations, bridge crossings, or movement geometry.
+ mesh(box,soil,0,-.58,0,20,.3,22,terrain);mesh(box,soil,0,-.3,0,12,.5,13,terrain);mesh(box,grass,0,-.08,0,7,.12,9,terrain);
+ for(const [x,z,sx,sz,h] of [[-7,-5,3.6,5,1.8],[7,-4,3.8,5,2.1],[-7,4,3.4,5,1.7],[7,5,3.7,5,2]] as const){
+  mesh(cone,soil,x,-.05,z,sx,h,sz,terrain);mesh(cone,grass,x,.12,z,sx*.88,h*.92,sz*.88,terrain);
+ }
  // No chess grid or piece bases: an abstract encampment with two actual crossing roads.
  mesh(box,river,0,.015,0,10,.055,.35,terrain);
- for(const x of [-1.5,1.5]){mesh(box,road,x,.01,0,.65,.045,8.6,terrain);mesh(box,wood,x,.08,0,.8,.1,.62,terrain);for(const dx of [-.4,.4])mesh(box,wood,x+dx,.19,0,.04,.2,.62,terrain);}
+ for(const x of [-1.5,1.5]){mesh(box,road,x,.01,0,.65,.045,8.6,terrain);mesh(box,wood,x,CINEMA_BRIDGE_TOP-.05,0,.8,.1,.62,terrain);for(const dx of [-.4,.4])mesh(box,wood,x+dx,CINEMA_BRIDGE_TOP+.06,0,.04,.2,.62,terrain);}
  for(const owner of [1,2] as const){const z=owner===1?4.1:-4.1,m=owner===1?blue:red;mesh(box,m,0,.55,z,2.1,1,.05,terrain);for(const x of [-1.1,1.1])mesh(cylinder,wood,x,.72,z,.045,1.5,.045,terrain);mesh(cone,m,0,.75,z+ (owner===1?.3:-.3),1.8,1.15,1.1,terrain);sign(owner===1?'自軍本陣':'敵軍本陣',0,1.65,z,1.8,terrain);}
  for(const x of [-5,5])for(let i=0;i<6;i++){const z=-5+i*2;mesh(cone,grass,x,.5,z,2,1.4+i%2,2.5,terrain);mesh(cylinder,wood,x*.7,.3,z,.09,.6,.09,terrain);mesh(cone,grass,x*.7,.9,z,.7,1.1,.7,terrain);}
  const dustMaterial=new THREE.MeshBasicMaterial({color:'#deceb1',transparent:true,opacity:.55,depthWrite:false});materials.add(dustMaterial);
  const smokeGeo=geo(new THREE.IcosahedronGeometry(.18,0)),routeRing=geo(new THREE.RingGeometry(.29,.34,24));
  const routeMaterial=new THREE.MeshBasicMaterial({color:'#ffdc8c',depthWrite:false});materials.add(routeMaterial);
- let state=initial,disposed=false,raf=0,lastSize='',frameNumber=0,animation:((now:number)=>boolean)|undefined,started=0,paused:number|null=null,preset:CameraPreset='full',reportedPreset:CameraPreset='full',manualUntil=-Infinity,manualCamera=false,populated=false;
+ const tracerMaterial=new THREE.MeshBasicMaterial({color:'#fff2bb',depthWrite:false});materials.add(tracerMaterial);
+ const routeRibbonGeometry=geo(new THREE.BufferGeometry()),routeRibbonMesh=new THREE.Mesh(routeRibbonGeometry,routeMaterial);
+ function drawRouteRibbon(path:ReturnType<typeof cinemaRoute>){
+  const samples:{x:number;y:number;z:number}[]=[];
+  for(let i=1;i<path.length;i++){const from=path[i-1],to=path[i],dx=to.x-from.x,dz=to.z-from.z,steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)*10));for(let step=i===1?0:1;step<=steps;step++){const t=step/steps,x=from.x+dx*t,z=from.z+dz*t;samples.push({x,y:cinemaGroundHeight(x,z)+.035,z});}}
+  const positions:number[]=[],indices:number[]=[],half=.0275;
+  samples.forEach((point,i)=>{const previous=samples[Math.max(0,i-1)],next=samples[Math.min(samples.length-1,i+1)],dx=next.x-previous.x,dz=next.z-previous.z,length=Math.hypot(dx,dz)||1,nx=-dz/length*half,nz=dx/length*half;positions.push(point.x+nx,point.y,point.z+nz,point.x-nx,point.y,point.z-nz);if(i<samples.length-1){const a=i*2,b=a+2;indices.push(a,b,a+1,a+1,b,b+1);}});
+  routeRibbonGeometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));routeRibbonGeometry.setIndex(indices);routeRibbonGeometry.computeVertexNormals();routeRibbonGeometry.computeBoundingSphere();routes.add(routeRibbonMesh);
+ }
+ let state=initial,disposed=false,raf=0,lastSize='',frameNumber=0,animation:((now:number)=>boolean)|undefined,started=0,paused:number|null=null,hiddenAt:number|null=document.visibilityState==='hidden'?performance.now():null,routeMotion:THREE.Object3D[]=[],preset:CameraPreset='full',reportedPreset:CameraPreset='full',manualUntil=-Infinity,manualCamera=false,populated=false;
  let activeTiming:ReturnType<typeof cinemaTiming>|undefined,actionPose:CinemaPose,overviewPose:CinemaPose,shotStart:CinemaPose,shotProgress=1,settled=true;
  const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
  const observer=new ResizeObserver(resize);
  // An idle WebGL canvas may be discarded while off-screen. Repaint on return,
  // without turning the event-driven renderer into a permanent animation loop.
  const visibility=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))requestDraw();});
- function visible(){if(document.visibilityState==='visible')requestDraw();}
+ function visible(){const now=performance.now();if(document.visibilityState==='hidden'){if(hiddenAt===null)hiddenAt=now;return;}if(hiddenAt!==null){const hiddenDuration=Math.max(0,now-hiddenAt);started+=hiddenDuration;if(paused!==null)paused+=hiddenDuration;hiddenAt=null;}requestDraw();}
  function reportCamera(value:CameraPreset){canvas.dataset.cameraPreset=value;if(value!==reportedPreset){reportedPreset=value;handlers.onCameraChange?.(value);}}
  function applyPose(pose:CinemaPose){if(!manualCamera)reportCamera(pose.framing==='overview'?'full':'last');camera.position.set(...pose.position);target.set(...pose.target);camera.lookAt(target);canvas.dataset.shot=pose.shot;canvas.dataset.framing=pose.framing;canvas.dataset.cameraPose=camera.position.toArray().join('/')+'/'+target.toArray().join('/');}
  function currentPose():CinemaPose{return {position:camera.position.toArray(),target:target.toArray(),shot:state.cinematic?.shot??'opening',framing:'action'};}
@@ -54,9 +68,9 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
  function setCamera(value:CameraPreset){preset=value;manualUntil=performance.now()+3000;manualCamera=true;applyPose(cinemaManualPose(state,camera.aspect,preset));canvas.dataset.cameraDirector='manual';reportCamera(preset);requestDraw();}
  function resize(){if(disposed)return;const w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight),ratio=Math.min(window.devicePixelRatio||1,qualityProfile(state.quality??'standard').pixelRatio),key=`${w}/${h}/${ratio}`;if(key===lastSize)return;lastSize=key;engine.setPixelRatio(ratio);engine.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();canvas.dataset.quality=state.quality??'standard';canvas.dataset.pixelRatio=String(ratio);refreshShots();if(manualCamera)applyPose(cinemaManualPose(state,camera.aspect,preset));else{shotStart=overviewPose;cameraShot(settled||shotProgress>=1);}requestDraw();}
  function draw(){const orientation=new THREE.Quaternion();labels.forEach(o=>{if(o.parent)o.parent.getWorldQuaternion(orientation);else orientation.identity();o.quaternion.copy(orientation.invert().multiply(camera.quaternion));});engine.render(scene,camera);canvas.dataset.frame=String(++frameNumber);const info=(engine as unknown as {info?:{render?:{calls?:number;triangles?:number;drawCalls?:number}}}).info?.render;if(info){canvas.dataset.drawCalls=String(info.calls??info.drawCalls??0);canvas.dataset.triangles=String(info.triangles??0);}}
- function requestDraw(){if(disposed||raf)return;raf=requestAnimationFrame(now=>{raf=0;if(disposed)return;try{const active=paused===null&&!!animation?.(now);draw();if(active)requestDraw();else if(paused===null)animation=undefined;}catch{onFailure();}});}
+ function requestDraw(){if(disposed||raf)return;raf=requestAnimationFrame(now=>{raf=0;if(disposed)return;try{const visibleFrame=hiddenAt===null,active=visibleFrame&&paused===null&&!!animation?.(now);draw();if(active)requestDraw();else if(visibleFrame&&paused===null)animation=undefined;}catch{onFailure();}});}
  function unit(piece:BattlefieldPiece,parent:THREE.Object3D):THREE.Group{
-  const g=new THREE.Group(),p=sitePoint(piece.position);g.position.set(p.x,0,p.z);g.rotation.y=piece.owner===1?0:Math.PI;g.name='historical-squad';g.userData.piece=piece;parent.add(g);
+  const g=new THREE.Group(),p=sitePoint(piece.position);g.position.set(p.x,cinemaGroundHeight(p.x,p.z),p.z);g.rotation.y=piece.owner===1?0:Math.PI;g.name='historical-squad';g.userData.piece=piece;parent.add(g);
   const uniform=piece.owner===1?blue:red,style=identity(piece),type=piece.unknown?'unknown':piece.type;
   const model=(kind:string,dx:number,dz:number,commander:boolean)=>{
    const b=new THREE.Group();b.position.set(dx,0,dz);g.add(b);
@@ -85,7 +99,7 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
  const batches:THREE.InstancedMesh[]=[];
  function batchStatic(groups:readonly THREE.Group[]){
   const collected=new Map<THREE.BufferGeometry,Map<THREE.Material,THREE.Mesh[]>>();scene.updateMatrixWorld(true);
-  for(const group of groups)group.traverse(o=>{if(!(o instanceof THREE.Mesh)||Array.isArray(o.material)||!(o.material instanceof THREE.MeshLambertMaterial))return;let byMaterial=collected.get(o.geometry);if(!byMaterial){byMaterial=new Map();collected.set(o.geometry,byMaterial);}const list=byMaterial.get(o.material)??[];list.push(o);byMaterial.set(o.material,list);});
+  for(const group of groups)group.traverse(o=>{if(!(o instanceof THREE.Mesh)||Array.isArray(o.material)||(!(o.material instanceof THREE.MeshLambertMaterial)&&!(o.material instanceof THREE.MeshStandardMaterial)))return;let byMaterial=collected.get(o.geometry);if(!byMaterial){byMaterial=new Map();collected.set(o.geometry,byMaterial);}const list=byMaterial.get(o.material)??[];list.push(o);byMaterial.set(o.material,list);});
   for(const [geometry,byMaterial] of collected)for(const [material,meshes] of byMaterial){const batch=new THREE.InstancedMesh(geometry,material,meshes.length);meshes.forEach((o,i)=>{batch.setMatrixAt(i,o.matrixWorld);o.removeFromParent();});batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();units.add(batch);batches.push(batch);}
  }
  function clearUnits(){batches.forEach(b=>b.dispose());batches.length=0;for(let i=labels.length-1;i>=2;i--){let parent:THREE.Object3D|null=labels[i];while(parent&&parent!==units)parent=parent.parent;if(parent===units)labels.splice(i,1);}units.clear();}
@@ -100,53 +114,60 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
    else if(!previous.cinematic?.playing&&next.cinematic.playing&&paused!==null){started+=now-paused;paused=null;requestDraw();}
    return;
   }
-  populated=true;animation=undefined;activeTiming=undefined;paused=null;settled=true;shotProgress=1;effects.clear();clearUnits();routes.clear();labels.length=2;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;
+  populated=true;animation=undefined;activeTiming=undefined;paused=null;settled=true;shotProgress=1;effects.clear();clearUnits();routes.clear();routeMotion=[];labels.length=2;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;
   const last=next.lastMove,sequential=hadFrame&&next.moveCount===previous.moveCount+1&&last&&!reduced.matches,mover=sequential?previous.pieces.find(p=>p.position===last.from):undefined,defender=sequential?previous.pieces.find(p=>p.position===last.to):undefined;
   const outcome=next.battleOutcome,battle=!!sequential&&next.battleSite===last?.to&&!!outcome;
   const staticGroups:THREE.Group[]=[];
   for(const p of next.pieces){if(mover&&p.position===last!.to)continue;staticGroups.push(unit(p,units));}
   batchStatic(staticGroups);
   canvas.dataset.unitCount=String(next.pieces.length);canvas.dataset.renderedSquads=String(staticGroups.length);canvas.dataset.followers=String(qualityProfile(next.quality??'standard').followers);
-  if(last){const path=cinemaRoute(last),a=path[0],b=path[path.length-1];for(let i=1;i<path.length;i++){const from=path[i-1],to=path[i],dx=to.x-from.x,dz=to.z-from.z;const line=mesh(box,routeMaterial,(from.x+to.x)/2,.12,(from.z+to.z)/2,.055,.025,Math.hypot(dx,dz),routes);line.rotation.y=Math.atan2(dx,dz);}
-   const prior=path[path.length-2],direction=new THREE.Vector3(b.x-prior.x,0,b.z-prior.z).normalize(),tip=mesh(cone,routeMaterial,b.x,.14,b.z,.24,.3,.1,routes);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
-   for(const p of [a,b])mesh(routeRing,routeMaterial,p.x,.12,p.z,1,1,1,routes).rotation.x=-Math.PI/2;
-   sign('発',a.x,.24,a.z,.35,routes);sign('着',b.x,.24,b.z,.35,routes);canvas.dataset.lastMove=`${last.from}/${last.to}`;
-  }else delete canvas.dataset.lastMove;
+   let routeTracer:THREE.Mesh|undefined,routeHalo:THREE.Mesh|undefined;
+   if(last){const path=cinemaRoute(last),a=path[0],b=path[path.length-1];
+    drawRouteRibbon(path);
+    const prior=path[path.length-2],tipY=cinemaGroundHeight(b.x,b.z)+.05,priorY=cinemaGroundHeight(prior.x,prior.z)+.035,direction=new THREE.Vector3(b.x-prior.x,tipY-priorY,b.z-prior.z).normalize(),tip=mesh(cone,routeMaterial,b.x,tipY,b.z,.24,.3,.1,routes);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
+    for(const p of [a,b])mesh(routeRing,routeMaterial,p.x,cinemaGroundHeight(p.x,p.z)+.025,p.z,1,1,1,routes).rotation.x=-Math.PI/2;
+    if(sequential&&mover&&!reduced.matches){routeTracer=mesh(cone,tracerMaterial,a.x,cinemaGroundHeight(a.x,a.z)+.12,a.z,.16,.24,.16,routes);routeTracer.name='historical-route-tracer';routeMotion=[routeTracer];routeHalo=mesh(routeRing,tracerMaterial,a.x,cinemaGroundHeight(a.x,a.z)+.025,a.z,.72,.72,.72,routes);routeHalo.rotation.x=-Math.PI/2;routeHalo.name='historical-route-pulse';routeMotion.push(routeHalo);}
+    sign('発',a.x,cinemaGroundHeight(a.x,a.z)+.15,a.z,.35,routes);sign('着',b.x,cinemaGroundHeight(b.x,b.z)+.15,b.z,.35,routes);canvas.dataset.lastMove=`${last.from}/${last.to}`;
+   }else delete canvas.dataset.lastMove;
   // A manual view survives resize/quality/pause. Only a new recorded move can resume direction.
   if(hadFrame&&next.moveCount!==previous.moveCount&&performance.now()>manualUntil)manualCamera=false;
   refreshShots();shotStart=currentPose();canvas.dataset.cameraDirector=manualCamera?'manual':'focus';
   if(manualCamera)applyPose(cinemaManualPose(next,camera.aspect,preset));else if(!sequential||!mover)cameraShot(!!next.cinematic.ending||reduced.matches);else if(next.cinematic.shot==='march')cameraShot();
   if(sequential&&mover&&last){
-   const attacker=unit(mover,units),defending=defender?unit(defender,units):undefined,path=cinemaRoute(last),a=path[0],b=path[path.length-1],direction=new THREE.Vector3(b.x-a.x,0,b.z-a.z).normalize();
+   const attacker=unit(mover,units),defending=defender?unit(defender,units):undefined,path=cinemaRoute(last),a=path[0],b=path[path.length-1],first=path[1],prior=path[path.length-2],direction=new THREE.Vector3(first.x-a.x,0,first.z-a.z).normalize(),contactDirection=new THREE.Vector3(b.x-prior.x,0,b.z-prior.z).normalize();
    activeTiming=cinemaTiming(next.cinematic.speed,battle,next.cinematic.shot==='decisive');settled=false;shotProgress=0;
-   attacker.rotation.y=Math.atan2(direction.x,direction.z);if(defending)defending.rotation.y=attacker.rotation.y+Math.PI;
+   attacker.rotation.y=Math.atan2(direction.x,direction.z);if(defending)defending.rotation.y=Math.atan2(-contactDirection.x,-contactDirection.z);
    canvas.dataset.renderedSquads=String(staticGroups.length+1+(defending?1:0));
-   const dust=battle?Array.from({length:qualityProfile(next.quality??'standard').particles},()=>mesh(smokeGeo,dustMaterial,b.x,.25,b.z,1,1,1,effects)):[];
+    const dust=battle?Array.from({length:qualityProfile(next.quality??'standard').particles},()=>mesh(smokeGeo,dustMaterial,b.x,cinemaGroundHeight(b.x,b.z)+.25,b.z,1,1,1,effects)):[];
    if(battle){canvas.dataset.battleEffect=outcome;canvas.dataset.battlePhase='approach';}
    started=performance.now();
-   animation=now=>{
+    animation=now=>{
     const timing=activeTiming!,duration=timing.march+timing.clash+timing.exit,elapsed=Math.max(0,now-started),travel=Math.min(1,elapsed/timing.march),kind=mover.unknown?'soldier':mover.type;
-    const t=kind==='cavalry'?1-Math.pow(1-travel,2):kind==='engineer'?travel:travel*travel*(3-2*travel),point=cinemaRoutePoint(path,t);
+      const t=kind==='cavalry'?1-Math.pow(1-travel,2):kind==='engineer'?travel:travel*travel*(3-2*travel),point=cinemaRoutePoint(path,t),before=cinemaRoutePoint(path,Math.max(0,t-.025)),ahead=cinemaRoutePoint(path,Math.min(1,t+.025)),heading=cinemaRouteDirection(path,t),tangent=new THREE.Vector3(heading.x,cinemaGroundHeight(ahead.x,ahead.z)-cinemaGroundHeight(before.x,before.z),heading.z);
+     if(tangent.lengthSq()<1e-8)tangent.copy(contactDirection);else tangent.normalize();
+     if(tangent.lengthSq()>0)attacker.rotation.y=Math.atan2(tangent.x,tangent.z);
     const bob=kind==='aircraft'?Math.sin(t*Math.PI)*1.1:kind==='tank'||kind==='spy'?0:Math.sin(travel*Math.PI*12)*(kind==='cavalry'?.07:kind==='engineer'?.04:.02)*(1-travel);
-    attacker.position.set(point.x,bob,point.z);
+      const groundY=cinemaGroundHeight(point.x,point.z);
+      if(routeTracer&&routeHalo){routeTracer.position.set(point.x,groundY+.12,point.z);routeTracer.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);routeHalo.position.set(point.x,groundY+.025,point.z);routeHalo.scale.setScalar(.68+.16*Math.sin(now*.012));canvas.dataset.routeProgress=travel.toFixed(3);}
+     attacker.position.set(point.x,groundY+bob,point.z);
     const clash=Math.max(0,Math.min(1,(elapsed-timing.march)/Math.max(1,timing.clash))),exit=Math.max(0,Math.min(1,(elapsed-timing.march-timing.clash)/Math.max(1,timing.exit)));
     if(battle){canvas.dataset.battlePhase=elapsed<timing.march?'approach':elapsed<timing.march+timing.clash?'contact':'resolution';
      // Keep both forces readable at contact; only formal removals disappear.
-     attacker.position.addScaledVector(direction,-.3*travel*(1-exit));if(defending)defending.position.set(b.x+direction.x*.22*travel*(1-exit),0,b.z+direction.z*.22*travel*(1-exit));
-     dustMaterial.opacity=clash>0?(1-exit)*.35:0;dust.forEach((o,i)=>{const angle=i/dust.length*Math.PI*2;o.position.set(b.x+Math.cos(angle)*clash*.5,.15+Math.sin(clash*Math.PI)*.35,b.z+Math.sin(angle)*clash*.5);o.scale.setScalar(.5+clash*1.1);});
+      attacker.position.addScaledVector(contactDirection,-.3*travel*(1-exit));attacker.position.y=cinemaGroundHeight(attacker.position.x,attacker.position.z)+bob;if(defending){defending.position.set(b.x+contactDirection.x*.22*travel*(1-exit),0,b.z+contactDirection.z*.22*travel*(1-exit));defending.position.y=cinemaGroundHeight(defending.position.x,defending.position.z);}
+     dustMaterial.opacity=clash>0?(1-exit)*.35:0;dust.forEach((o,i)=>{const angle=i/dust.length*Math.PI*2;o.position.set(b.x+Math.cos(angle)*clash*.5,cinemaGroundHeight(b.x,b.z)+.15+Math.sin(clash*Math.PI)*.35,b.z+Math.sin(angle)*clash*.5);o.scale.setScalar(.5+clash*1.1);});
      attacker.rotation.z=clash>0&&clash<1?Math.sin(clash*Math.PI*6)*.055:0;if(defending)defending.rotation.z=-attacker.rotation.z;
-     if(outcome==='DEFENDER'||outcome==='MUTUAL'){attacker.scale.setScalar(1-exit);attacker.position.y-=exit*.25;}
-     if(defending&&(outcome==='ATTACKER'||outcome==='MUTUAL')){defending.scale.setScalar(1-exit);defending.position.y=-exit*.25;}
+      if(outcome==='DEFENDER'||outcome==='MUTUAL'){attacker.scale.setScalar(1-exit);attacker.position.y=cinemaGroundHeight(attacker.position.x,attacker.position.z)-exit*.25;}
+      if(defending&&(outcome==='ATTACKER'||outcome==='MUTUAL')){defending.scale.setScalar(1-exit);defending.position.y=cinemaGroundHeight(defending.position.x,defending.position.z)-exit*.25;}
     }
     shotProgress=exit;
     if(!manualCamera){if(exit>0)blendPose(actionPose,overviewPose,exit);else if(next.cinematic?.shot!=='march')blendPose(shotStart,actionPose,Math.min(1,travel/.7));}
-    if(elapsed>=duration){effects.clear();delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(next.pieces);settled=true;if(!manualCamera)cameraShot(true);return false;}return true;
+     if(elapsed>=duration){effects.clear();if(routeTracer)routeTracer.visible=false;if(routeHalo)routeHalo.visible=false;routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(next.pieces);settled=true;if(!manualCamera)cameraShot(true);return false;}return true;
    };
    animation(started);
   }
   if(next.quality!==previous.quality)lastSize='';resize();requestDraw();
  }
- function motionChanged(){if(reduced.matches&&animation){animation=undefined;activeTiming=undefined;paused=null;effects.clear();delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(state.pieces);settled=true;if(!manualCamera)cameraShot(true);requestDraw();}}
+ function motionChanged(){if(reduced.matches&&animation){animation=undefined;activeTiming=undefined;paused=null;effects.clear();routeMotion.forEach(object=>object.visible=false);routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(state.pieces);settled=true;if(!manualCamera)cameraShot(true);requestDraw();}}
  function lost(e:Event){e.preventDefault();onFailure();}
  function dispose(){if(disposed)return;disposed=true;cancelAnimationFrame(raf);observer.disconnect();visibility.disconnect();document.removeEventListener('visibilitychange',visible);canvas.removeEventListener('webglcontextlost',lost);reduced.removeEventListener('change',motionChanged);batches.forEach(b=>b.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());scene.clear();backend.dispose();canvas.remove();}
  try{
@@ -156,3 +177,7 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
   return {backend:backend.kind,update,reset:()=>setCamera('full'),setCamera,dispose,capture:async()=>{if(disposed)throw new Error('戦場は閉じられています');if(backend.kind==='webgpu'&&engine.renderAsync)await engine.renderAsync(scene,camera);else draw();const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;const context=copy.getContext('2d');if(!context)throw new Error('画像作成に失敗しました');context.drawImage(canvas,0,0);return copy;}};
  }catch(error){dispose();throw error;}
 }
+
+
+
+

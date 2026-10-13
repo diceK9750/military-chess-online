@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { SITES } from '../game/board';
-import { cinemaActionBounds, cinemaCorners, cinemaManualPose, cinemaPose, cinemaRetime, cinemaRoute, cinemaRoutePoint, CINEMA_BOARD, type CinemaPose, type CinemaShot } from './cinemaDirector';
+import { cinemaActionBounds, cinemaCorners, cinemaGroundHeight, cinemaManualPose, cinemaPose, cinemaRetime, cinemaRoute, cinemaRouteDirection, cinemaRoutePoint, cinemaRoutePosition, CINEMA_BOARD, CINEMA_BRIDGE_TOP, type CinemaPose, type CinemaShot } from './cinemaDirector';
 import type { BattlefieldViewState } from './state';
 const film = (shot: CinemaShot, from: NonNullable<BattlefieldViewState['lastMove']>['from'] = 'B4', to: NonNullable<BattlefieldViewState['lastMove']>['to'] = 'B5') => ({ lastMove: { from, to }, cinematic: { shot, speed: 1, playing: true, title: '', ending: shot === 'decisive' } });
 function assertFits(pose: CinemaPose, aspect: number, bounds: typeof CINEMA_BOARD) {
@@ -19,6 +19,16 @@ test.each([.45, .7, 1.8])('action framing includes both real endpoints and tall 
   for (const destination of SITES) for (const shot of ['battle', 'breach', 'pressure', 'decisive'] as const) {
     const state = film(shot, 'HQ-P1', destination);
     assertFits(cinemaPose(state, aspect), aspect, cinemaActionBounds(state));
+  }
+});
+test.each([.45, .6, 1, 1.8, 2.3])('contact framing centers both recorded combat forces at aspect %s', aspect => {
+  for (const destination of SITES) {
+    const state = { ...film('battle', 'HQ-P1', destination), battleOutcome: 'ATTACKER' as const };
+    const bounds = cinemaActionBounds(state), pose = cinemaPose(state, aspect);
+    const routeBounds=cinemaActionBounds(film('battle','HQ-P1',destination));
+    expect(bounds.maxX-bounds.minX).toBeLessThan(routeBounds.maxX-routeBounds.minX);
+    expect(bounds.maxZ - bounds.minZ).toBeLessThan(4);
+    assertFits(pose, aspect, bounds);
   }
 });
 test('short contact is closer but stays overhead, and resolution restores the global board', () => {
@@ -40,4 +50,23 @@ test.each(['C', 'D'] as const)('HQ flight route follows only the recorded %s lan
   expect(cinemaRoutePoint(route, 0)).toEqual({ x: 0, z: 3.5 });
   expect(cinemaRoutePoint(route, .5)).toEqual({ x: lane === 'C' ? -.5 : .5, z: 0 });
   expect(cinemaRoutePoint(route, 1)).toEqual({ x: 0, z: -3.5 });
+});
+test.each(['B4', 'E4'] as const)('recorded bridge route follows the same smooth ground ramp as its deck (%s)', from => {
+  const to = from === 'B4' ? 'B5' : 'E5', route = cinemaRoute({ from, to });
+  const center = cinemaRoutePosition(route, .5);
+  expect(cinemaGroundHeight(center.x, center.z)).toBe(CINEMA_BRIDGE_TOP);
+  expect(center.y).toBe(CINEMA_BRIDGE_TOP);
+  expect(cinemaGroundHeight(center.x, .5)).toBe(0);
+  expect(cinemaGroundHeight(center.x, -.5)).toBe(0);
+  expect(cinemaGroundHeight(center.x, .4)).toBeGreaterThan(0);
+  expect(cinemaGroundHeight(center.x, .4)).toBeLessThan(CINEMA_BRIDGE_TOP);
+  expect(cinemaGroundHeight(center.x + .33, 0)).toBe(0);
+});
+test('recorded HQ lane turns use a deterministic smoothly changing heading', () => {
+  const route = cinemaRoute({ from: 'HQ-P1', to: 'HQ-P2', lane: 'D' }), turn = .5 / 7.5;
+  const before = cinemaRouteDirection(route, turn - .005), at = cinemaRouteDirection(route, turn), after = cinemaRouteDirection(route, turn + .005);
+  expect(Math.hypot(at.x, at.z)).toBeCloseTo(1, 6);
+  expect(before.x * at.x + before.z * at.z).toBeGreaterThan(.9);
+  expect(at.x * after.x + at.z * after.z).toBeGreaterThan(.9);
+  expect(cinemaRouteDirection(route, turn)).toEqual(cinemaRouteDirection(route, turn));
 });

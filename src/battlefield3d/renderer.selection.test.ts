@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { PerspectiveCamera, Vector3, type Camera, type Object3D } from 'three';
+import { Box3, Mesh, PerspectiveCamera, Vector3, type Camera, type Object3D } from 'three';
 import { createBattlefield, type BattlefieldRenderer } from './renderer';
 import { sitePoint, type BattlefieldViewState } from './state';
+import type { Site } from '../game/types';
 
 const backend = vi.hoisted(() => ({ render: vi.fn(), dispose: vi.fn() }));
 vi.mock('./backend', () => ({
@@ -59,6 +60,15 @@ test.each([false, true])('selection snaps without an animation lock or idle fram
   draw(); expect(frames.size).toBe(0); expect(fail).not.toHaveBeenCalled();
 });
 
+test('unrevealed enemy pieces have identical visible geometry, dimensions, materials, and no shadows', async () => {
+  const initial={...view(),pieces:[{owner:2 as const,position:'A3' as const,unknown:true as const},{owner:2 as const,position:'F6' as const,unknown:true as const}]};
+  renderer=await createBattlefield(host(),initial,vi.fn(),{onSiteSelect:vi.fn(),onLaneSelect:vi.fn()});draw();
+  const scene=backend.render.mock.calls.at(-1)![0] as Object3D;scene.updateMatrixWorld(true);
+  const model=(site:string)=>{let found:Mesh|undefined;scene.traverse(o=>{if(!found&&o instanceof Mesh&&o.geometry.type==='ExtrudeGeometry'&&o.userData.site===site)found=o;});expect(found).toBeDefined();return found!.parent!;};
+  const signature=(root:Object3D,site:Site)=>{const bounds=new Box3().setFromObject(root),size=new Vector3();bounds.getSize(size);const origin=sitePoint(site),parts:unknown[]=[];root.traverse(o=>{if(!(o instanceof Mesh))return;const surfaces=Array.isArray(o.material)?o.material:[o.material];expect(o.castShadow).toBe(false);expect(o.receiveShadow).toBe(false);parts.push([o.geometry.type,[o.position.x-origin.x,o.position.y,o.position.z-origin.z],o.rotation.toArray(),o.scale.toArray(),surfaces.map(m=>{const color=(m as {color?:{getHex?:()=>number}}).color;return color?.getHex?.()??null;})]);});return {size:size.toArray(),parts};};
+  expect(signature(model('A3'),'A3')).toEqual(signature(model('F6'),'F6'));
+});
+
 test('manual overview survives pending confirmation and clearing/turn change restores overview', async () => {
   const element = host();
   renderer = await createBattlefield(element, view(), vi.fn(), { onSiteSelect: vi.fn(), onLaneSelect: vi.fn() });
@@ -93,6 +103,23 @@ test('touch drag keeps the camera stationary and invalid release safely applies 
   expect(canvas.dataset.cameraPreset).toBe('selected'); expect(canvas.dataset.cameraPose).not.toBe(overview);
 });
 
+test('pointercancel clears the captured drag and cannot commit on a later pointerup', async () => {
+  const element = host(), onPieceDrop = vi.fn(), onSiteSelect = vi.fn();
+  renderer = await createBattlefield(element, view(), vi.fn(), {
+    onSiteSelect, onLaneSelect: vi.fn(), onPieceDrop,
+    onDragStart: () => renderer!.update(view(true)),
+  });
+  draw(); const canvas = element.querySelector('canvas')!, pose = canvas.dataset.cameraPose!.split('/').map(Number);
+  canvas.releasePointerCapture = vi.fn();
+  const camera = new PerspectiveCamera(42, 390 / 430, .1, 200); camera.position.set(pose[0], pose[1], pose[2]); camera.lookAt(pose[3], pose[4], pose[5]); camera.updateMatrixWorld();
+  const point = sitePoint('B4'), projected = new Vector3(point.x, .38, point.z).project(camera), x = (projected.x + 1) * 195, y = (1 - projected.y) * 215;
+  const pointer = (type: string, clientX: number, clientY: number) => canvas.dispatchEvent(Object.assign(new MouseEvent(type, { button: 0, clientX, clientY, bubbles: true }), { pointerId: 7, pointerType: 'touch' }));
+  pointer('pointerdown', x, y); pointer('pointermove', x + 12, y + 12);
+  expect(canvas.dataset.dragging).toBe('B4');
+  pointer('pointercancel', x + 12, y + 12); pointer('pointerup', x + 20, y + 20);
+  expect(canvas.dataset.dragging).toBeUndefined(); expect(onPieceDrop).not.toHaveBeenCalled(); expect(onSiteSelect).not.toHaveBeenCalled();
+});
+
 test('legal destination and its confirmation retap keep identical framing and site callbacks', async () => {
   const element = host(), chosen: string[] = [];
   let current = view();
@@ -120,3 +147,7 @@ test('legal destination and its confirmation retap keep identical framing and si
   tap('B5'); expect(canvas.dataset.pendingSite).toBe('B5'); expect(canvas.dataset.cameraPose).toBe(selectedPose);
   tap('B5'); expect(chosen).toEqual(['B4', 'B5', 'B5']); expect(canvas.dataset.cameraPreset).toBe('full');
 });
+
+
+
+
