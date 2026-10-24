@@ -9,6 +9,7 @@ import {identity} from './identity';
 import {addOfficerRegalia,officerLook} from './regalia';
 import {CINEMA_BRIDGE_TOP,cinemaGroundHeight,cinemaPose,cinemaManualPose,cinemaRetime,cinemaRoute,cinemaRouteDirection,cinemaRoutePoint,type CinemaPose} from './cinemaDirector';
 
+import {squadFormation} from './squad';
 import {cinemaTiming} from './cinemaPresentation';
 /** Dedicated terrain and squads. Receives only a finished-source, allowlisted display adapter. */
 export async function createBattlefield(host:HTMLElement,initial:BattlefieldViewState,onFailure:()=>void,handlers:BattlefieldHandlers,forceWebGL=false):Promise<BattlefieldRenderer>{
@@ -68,7 +69,8 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
  function setCamera(value:CameraPreset){preset=value;manualUntil=performance.now()+3000;manualCamera=true;applyPose(cinemaManualPose(state,camera.aspect,preset));canvas.dataset.cameraDirector='manual';reportCamera(preset);requestDraw();}
  function resize(){if(disposed)return;const w=Math.max(1,host.clientWidth),h=Math.max(1,host.clientHeight),ratio=Math.min(window.devicePixelRatio||1,qualityProfile(state.quality??'standard').pixelRatio),key=`${w}/${h}/${ratio}`;if(key===lastSize)return;lastSize=key;engine.setPixelRatio(ratio);engine.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();canvas.dataset.quality=state.quality??'standard';canvas.dataset.pixelRatio=String(ratio);refreshShots();if(manualCamera)applyPose(cinemaManualPose(state,camera.aspect,preset));else{shotStart=overviewPose;cameraShot(settled||shotProgress>=1);}requestDraw();}
  function draw(){const orientation=new THREE.Quaternion();labels.forEach(o=>{if(o.parent)o.parent.getWorldQuaternion(orientation);else orientation.identity();o.quaternion.copy(orientation.invert().multiply(camera.quaternion));});engine.render(scene,camera);canvas.dataset.frame=String(++frameNumber);const info=(engine as unknown as {info?:{render?:{calls?:number;triangles?:number;drawCalls?:number}}}).info?.render;if(info){canvas.dataset.drawCalls=String(info.calls??info.drawCalls??0);canvas.dataset.triangles=String(info.triangles??0);}}
- function requestDraw(){if(disposed||raf)return;raf=requestAnimationFrame(now=>{raf=0;if(disposed)return;try{const visibleFrame=hiddenAt===null,active=visibleFrame&&paused===null&&!!animation?.(now);draw();if(active)requestDraw();else if(visibleFrame&&paused===null)animation=undefined;}catch{onFailure();}});}
+ let completedMove=-1;
+ function requestDraw(){if(disposed||raf)return;raf=requestAnimationFrame(now=>{raf=0;if(disposed)return;try{const visibleFrame=hiddenAt===null,active=visibleFrame&&paused===null&&!!animation?.(now);draw();if(!active&&paused===null&&settled&&state.cinematic?.ending&&completedMove!==state.moveCount){completedMove=state.moveCount;handlers.onReplayComplete?.(state.moveCount);}if(active)requestDraw();else if(visibleFrame&&paused===null)animation=undefined;}catch{onFailure();}});}
  function unit(piece:BattlefieldPiece,parent:THREE.Object3D):THREE.Group{
   const g=new THREE.Group(),p=sitePoint(piece.position);g.position.set(p.x,cinemaGroundHeight(p.x,p.z),p.z);g.rotation.y=piece.owner===1?0:Math.PI;g.name='historical-squad';g.userData.piece=piece;parent.add(g);
   const uniform=piece.owner===1?blue:red,style=identity(piece),type=piece.unknown?'unknown':piece.type;
@@ -89,8 +91,7 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
    if(style.rank&&commander){b.scale.y=officerLook(style.rank).height;const shapes={box,cylinder,cone},colors={gold,silver,pale,uniform,dark};addOfficerRegalia(style.rank,(shape,color,x,y,z,sx,sy,sz,rz=0)=>{part(shapes[shape],colors[color],x,y,z,sx,sy,sz).rotation.z=rz;});}
   };
   model(type,0,0,true);
-  const followers=['aircraft','tank','mine','spy'].includes(type)?0:qualityProfile(state.quality??'standard').followers;
-  for(let i=0;i<followers;i++)model(type==='cavalry'?'cavalry':type==='engineer'?'engineer':'soldier',(i%2===0?-.24:.24),-.28-Math.floor(i/2)*.22,false);
+  if(!piece.unknown)for(const member of squadFormation(piece.type,qualityProfile(state.quality??'standard').followers)){model(member.type,member.x,member.z,false);g.children.at(-1)?.scale.multiplyScalar(member.scale);}
   const plaque=sign(piece.unknown?'不明駒':PIECES[piece.type].label,0,Math.max(1.45,1.26*officerLook(style.rank).height),0,piece.unknown?.76:Math.min(.98,.45+PIECES[piece.type].label.length*.13),g);plaque.rotation.y=-g.rotation.y;
   if(!piece.unknown&&style.rank>=4)plaque.material=text(PIECES[piece.type].label,style.rank>=7?'general':'colonel');
   return g;
@@ -114,7 +115,7 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
    else if(!previous.cinematic?.playing&&next.cinematic.playing&&paused!==null){started+=now-paused;paused=null;requestDraw();}
    return;
   }
-  populated=true;animation=undefined;activeTiming=undefined;paused=null;settled=true;shotProgress=1;effects.clear();clearUnits();routes.clear();routeMotion=[];labels.length=2;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;
+  completedMove=-1;populated=true;animation=undefined;activeTiming=undefined;paused=null;settled=true;shotProgress=1;effects.clear();clearUnits();routes.clear();routeMotion=[];labels.length=2;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;delete canvas.dataset.marching;
   const last=next.lastMove,sequential=hadFrame&&next.moveCount===previous.moveCount+1&&last&&!reduced.matches,mover=sequential?previous.pieces.find(p=>p.position===last.from):undefined,defender=sequential?previous.pieces.find(p=>p.position===last.to):undefined;
   const outcome=next.battleOutcome,battle=!!sequential&&next.battleSite===last?.to&&!!outcome;
   const staticGroups:THREE.Group[]=[];
@@ -134,6 +135,7 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
   refreshShots();shotStart=currentPose();canvas.dataset.cameraDirector=manualCamera?'manual':'focus';
   if(manualCamera)applyPose(cinemaManualPose(next,camera.aspect,preset));else if(!sequential||!mover)cameraShot(!!next.cinematic.ending||reduced.matches);else if(next.cinematic.shot==='march')cameraShot();
   if(sequential&&mover&&last){
+   canvas.dataset.marching='true';
    const attacker=unit(mover,units),defending=defender?unit(defender,units):undefined,path=cinemaRoute(last),a=path[0],b=path[path.length-1],first=path[1],prior=path[path.length-2],direction=new THREE.Vector3(first.x-a.x,0,first.z-a.z).normalize(),contactDirection=new THREE.Vector3(b.x-prior.x,0,b.z-prior.z).normalize();
    activeTiming=cinemaTiming(next.cinematic.speed,battle,next.cinematic.shot==='decisive');settled=false;shotProgress=0;
    attacker.rotation.y=Math.atan2(direction.x,direction.z);if(defending)defending.rotation.y=Math.atan2(-contactDirection.x,-contactDirection.z);
@@ -161,13 +163,13 @@ export async function createBattlefield(host:HTMLElement,initial:BattlefieldView
     }
     shotProgress=exit;
     if(!manualCamera){if(exit>0)blendPose(actionPose,overviewPose,exit);else if(next.cinematic?.shot!=='march')blendPose(shotStart,actionPose,Math.min(1,travel/.7));}
-     if(elapsed>=duration){effects.clear();if(routeTracer)routeTracer.visible=false;if(routeHalo)routeHalo.visible=false;routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(next.pieces);settled=true;if(!manualCamera)cameraShot(true);return false;}return true;
+     if(elapsed>=duration){effects.clear();if(routeTracer)routeTracer.visible=false;if(routeHalo)routeHalo.visible=false;routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(next.pieces);settled=true;delete canvas.dataset.marching;if(!manualCamera)cameraShot(true);return false;}return true;
    };
    animation(started);
   }
   if(next.quality!==previous.quality)lastSize='';resize();requestDraw();
  }
- function motionChanged(){if(reduced.matches&&animation){animation=undefined;activeTiming=undefined;paused=null;effects.clear();routeMotion.forEach(object=>object.visible=false);routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;populateUnits(state.pieces);settled=true;if(!manualCamera)cameraShot(true);requestDraw();}}
+ function motionChanged(){if(reduced.matches&&animation){animation=undefined;activeTiming=undefined;paused=null;effects.clear();routeMotion.forEach(object=>object.visible=false);routeMotion=[];delete canvas.dataset.routeProgress;delete canvas.dataset.battleEffect;delete canvas.dataset.battlePhase;delete canvas.dataset.marching;populateUnits(state.pieces);settled=true;if(!manualCamera)cameraShot(true);requestDraw();}}
  function lost(e:Event){e.preventDefault();onFailure();}
  function dispose(){if(disposed)return;disposed=true;cancelAnimationFrame(raf);observer.disconnect();visibility.disconnect();document.removeEventListener('visibilitychange',visible);canvas.removeEventListener('webglcontextlost',lost);reduced.removeEventListener('change',motionChanged);batches.forEach(b=>b.dispose());geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());scene.clear();backend.dispose();canvas.remove();}
  try{

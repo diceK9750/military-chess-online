@@ -13,7 +13,7 @@ function Preview({preset}:{preset:FormationPreset}){
   return <g key={p.site}><rect x={x} y={y} width={w} height={22} rx={3} fill={PIECES[p.type].captures?'#315e72':'#647450'}/><text x={x+w/2} y={y+14} textAnchor="middle" fill="#fff6dc" fontSize="8">{PIECES[p.type].label}</text></g>;
  })}</svg>;
 }
-export function FormationLibrary({ pieces, onApply }: { pieces: readonly Piece[]; onApply(pieces: readonly Piece[]): void }) {
+export function FormationLibrary({ pieces, onApply, saveRequested=0 }: { pieces: readonly Piece[]; onApply(pieces: readonly Piece[]): void; saveRequested?:number }) {
  const [loaded]=useState(()=>{try{return {presets:readLibrary(),error:''};}catch{return {presets:[],error:'陣形ライブラリを読み込めません。破損記録は適用せず保持しています。'};}});
  const [presets,setPresets]=useState<readonly FormationPreset[]>(loaded.presets);
  const [activeId,setActiveId]=useState(()=>loaded.presets.find(p=>signature(p.placements)===ownSignature(pieces))?.id??'');
@@ -23,6 +23,7 @@ export function FormationLibrary({ pieces, onApply }: { pieces: readonly Piece[]
  const nameInput=useRef<HTMLInputElement>(null);
  useEffect(()=>{if(editing)nameInput.current?.focus();},[editing]);
  useEffect(()=>{if(guide){try{localStorage.setItem(GUIDE_KEY,'done');}catch{/* Optional guide. */}}},[guide]);
+ useEffect(()=>{if(saveRequested){setName(`自作陣形 ${presets.length+1}`);setEditing('save');setDeleting(false);}},[saveRequested]);
  const current=presets.find(p=>p.id===selected),active=presets.find(p=>p.id===activeId);
  const dirty=!active||signature(active.placements)!==ownSignature(pieces);
  const fail=(error:unknown,fallback:string)=>setNotice({text:error instanceof Error?error.message:fallback,success:false});

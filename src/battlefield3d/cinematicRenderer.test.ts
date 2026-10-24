@@ -62,7 +62,7 @@ test('the moving route marker follows the recorded HQ lane and settles without c
   const expected = cinemaRoutePoint(cinemaRoute(next.lastMove!), .5);
   expect(tracer.position.x).toBeCloseTo(expected.x, 5); expect(tracer.position.z).toBeCloseTo(expected.z, 5);
   expect(tracer.position.x).toBeCloseTo(.5, 5); expect(canvas.dataset.routeProgress).toBe('0.500');
-  frame(1451); expect(tracer.visible).toBe(false); expect(canvas.dataset.routeProgress).toBeUndefined(); expect(canvas.dataset.unitCount).toBe('1'); expectSnapshot(next.pieces);
+  frame(1451); expect(tracer.visible).toBe(false); expect(canvas.dataset.routeProgress).toBeUndefined();expect(canvas.dataset.marching).toBeUndefined(); expect(canvas.dataset.unitCount).toBe('1'); expectSnapshot(next.pieces);
 });
 test.each(['ATTACKER', 'DEFENDER', 'MUTUAL'] as const)('%s battle retains both real actors through contact and settles to the exact survivor count', async outcome => {
   const { before, next } = conflict(outcome), canvas = await mount(before); renderer!.update(next); frame(1500);

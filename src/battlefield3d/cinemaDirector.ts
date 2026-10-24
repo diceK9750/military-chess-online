@@ -63,7 +63,7 @@ export function cinemaPose(state: Pick<BattlefieldViewState, 'cinematic' | 'last
   const shot = overview ? state.cinematic?.ending ? 'summary' : state.cinematic?.shot === 'opening' ? 'opening' : 'march' : state.cinematic?.shot ?? 'opening';
   const wide = overview || !state.lastMove || shot === 'opening' || shot === 'march' || shot === 'summary';
   // A stable overhead master shot makes advances readable. Angles change only for a recorded event.
-  const direction: readonly [number, number, number] = wide ? [0, 1, .6] : shot === 'breach' ? [.2, 1, .62] : shot === 'pressure' || shot === 'decisive' ? [.2, 1, .72] : [.18, 1, .7];
+  const direction: readonly [number, number, number] = wide ? [0, 1, .9] : shot === 'breach' ? [.2, 1, .62] : shot === 'pressure' || shot === 'decisive' ? [.2, 1, .72] : [.18, 1, .7];
   return fit(wide ? CINEMA_BOARD : cinemaActionBounds(state), aspect, direction, shot, wide ? 'overview' : 'action');
 }
 

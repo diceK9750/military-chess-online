@@ -1,3 +1,4 @@
+import {openExtras,openAudio} from './mobileControls';
 import { expect, test, type Page } from '@playwright/test';
 import { applyMove, startGame } from '../src/game/game';
 import { PIECES } from '../src/game/pieces';
@@ -44,6 +45,7 @@ async function seek(page: Page, index: number) {
 
 for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [390,844]]) {
   test(`chronicle, battle and sound ${width}x${height}`, async ({ page }, info) => {
+    test.setTimeout(60000); // Full replay, audio, seeks and captures share a software GPU.
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', e => { if (e.type() === 'error') errors.push(e.text()); });
@@ -61,7 +63,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     const saved = await page.evaluate(key => localStorage.getItem(key), MATCH_STORAGE_KEY);
     const probe = () => page.evaluate(() => (window as unknown as { soundProbe(): { contexts:number;state?:string;tones:number } }).soundProbe());
     expect((await probe()).contexts).toBe(0);
-    await page.getByRole('button', { name: '効果音 ONにする' }).click();
+    await openAudio(page);await page.getByRole('button', { name: '効果音 ONにする' }).click();
     await expect(page.getByRole('button', { name: '効果音 OFFにする' })).toHaveAttribute('aria-pressed', 'true');
     expect(await probe()).toMatchObject({ contexts: 1, state: 'running' });
     expect((await probe()).tones).toBeGreaterThan(0);
@@ -109,7 +111,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     const actual = await page.getByRole('list', { name: '三次元表示中の駒' }).locator('li').allTextContents();
     expect(actual.sort()).toEqual(expected);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole('button', { name: '結果画面へ戻る', exact: true }).click();
+    await openExtras(page);await page.getByRole('button', { name: '結果画面へ戻る', exact: true }).click();
     await expect(page.getByRole('heading', { name: '対局終了' })).toBeVisible();
     expect(await page.evaluate(key => localStorage.getItem(key), MATCH_STORAGE_KEY)).toBe(saved);
     expect(await page.evaluate(() => (window as unknown as { normalBoardMounted:boolean }).normalBoardMounted)).toBe(false);

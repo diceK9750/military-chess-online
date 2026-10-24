@@ -11,8 +11,9 @@ export interface BattlefieldViewState {
   readonly phase?: 'setup' | 'replay';
   readonly quality?: Quality;
   readonly overlay?: boolean;
+  readonly autoSelectionZoom?: boolean;
   readonly freshVictory?: boolean;
-  readonly cinematic?: { readonly shot: 'opening'|'march'|'battle'|'breach'|'pressure'|'decisive'|'summary'; readonly speed: number; readonly playing: boolean; readonly title: string; readonly ending: boolean };
+  readonly cinematic?: { readonly shot: 'opening'|'march'|'battle'|'breach'|'pressure'|'decisive'|'summary'; readonly speed: number; readonly playing: boolean; readonly title: string; readonly ending: boolean; readonly chapter?:string; readonly subtitle?:string; readonly summary?:string };
   readonly viewer: Player;
   readonly moveCount: number;
   readonly finished: boolean;
@@ -38,9 +39,10 @@ export interface BattlefieldHandlers {
   onDragStart?(site: Site): void;
   onPieceDrop?(from: Site, to: Site, lane?: 'C' | 'D'): void;
   onAnimationChange?(active: boolean): void;
+  onReplayComplete?(moveCount:number):void;
   onCameraChange?(preset: CameraPreset): void;
 }
-export type CameraPreset = 'full' | 'top' | 'front' | 'enemy' | 'selected' | 'last';
+export type CameraPreset = 'full' | 'top' | 'front' | 'enemy' | 'selected' | 'selection-fit' | 'last';
 const idle: BattlefieldInteraction = { selectedSite: null, legalTargets: [], pendingSite: null, laneCandidates: [], selectedLane: undefined, interactionEnabled: false };
 
 /** Setup has no CPU placement or GameState. Copy only human pieces and public interaction. */

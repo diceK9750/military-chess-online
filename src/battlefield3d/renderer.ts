@@ -141,7 +141,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     if (preset === 'top') {
       controls.target.set(0, .25, 0);
       camera.position.set(0, fullCameraDistance(camera.aspect, true), side * .001);
-    } else if (preset === 'selected' && state.interaction.selectedSite) {
+    } else if ((preset === 'selected'||preset==='selection-fit') && state.interaction.selectedSite) {
       const focus = selectionCameraFrame(camera.aspect, state.viewer, state.interaction.selectedSite, state.interaction.legalTargets, state.interaction.pendingSite);
       controls.target.set(...focus.target); camera.position.set(...focus.position);
       canvas.dataset.focusSites=focus.sites.join('/');
@@ -157,7 +157,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       controls.target.set(x, .25, z);
       camera.position.set(x, distance * .86, z + side * distance * .6);
     }
-    if(preset!=='selected')delete canvas.dataset.focusSites;
+    if(preset!=='selected'&&preset!=='selection-fit')delete canvas.dataset.focusSites;
     // Reframing is deliberately immediate: the next tap has a stable target, also with reduced motion.
     canvas.dataset.focusMotion='static';
     controls.update(); canvas.dataset.cameraPreset = preset;
@@ -238,7 +238,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       }
       return;
     }
-    if (scrollTouch?.id === event.pointerId) { window.scrollBy(0, scrollTouch.y - event.clientY); scrollTouch.y=event.clientY; }
+    if (scrollTouch?.id === event.pointerId) { if(!canvas.closest('.mobile-battlefield'))window.scrollBy(0, scrollTouch.y - event.clientY); scrollTouch.y=event.clientY; }
     if (!pointerIds.size) {
       const site=pick(event)?.object.userData.site as Site|undefined;
       const own=state.interaction.interactionEnabled && event.pointerType!=='touch' && state.pieces.some(p=>!p.unknown&&p.owner===state.viewer&&p.position===site);
@@ -398,7 +398,11 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       canvas.dataset.overlay=String(!!state.overlay);
       if(previous.quality!==next.quality){lastSize='';resize();}
       if (pieceDrag && (next.moveCount !== pieceDrag.moveCount || !next.interaction.interactionEnabled)) cancelDrag();
-      const selectionPreset=selectionCameraUpdate(previousCameraState,next,cameraPreset);
+      let selectionPreset=selectionCameraUpdate(previousCameraState,next,cameraPreset==='selection-fit'?'selected':cameraPreset);
+      if(next.autoSelectionZoom===false&&selectionPreset==='selected')selectionPreset=null;
+      if(next.autoSelectionZoom&&!previousCameraState?.autoSelectionZoom&&next.interaction.selectedSite)selectionPreset='selection-fit';
+      if(selectionPreset==='selected'&&next.autoSelectionZoom)selectionPreset='selection-fit';
+      if(next.autoSelectionZoom===false&&cameraPreset==='selection-fit')selectionPreset='full';
       if(pieceDrag?.active){if(selectionPreset)focusAfterDrag=true;}
       else if(selectionPreset)setCamera(selectionPreset);
       else if(cameraPreset==='last')setCamera('last');

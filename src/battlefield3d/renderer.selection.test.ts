@@ -151,3 +151,7 @@ test('legal destination and its confirmation retap keep identical framing and si
 
 
 
+
+test('enabling automatic fit with an already selected piece restores its legal region',async()=>{
+ const host=document.createElement('div');Object.defineProperties(host,{clientWidth:{value:390},clientHeight:{value:430}});document.body.append(host);const selected={...view(true),autoSelectionZoom:false};renderer=await createBattlefield(host,selected,vi.fn(),{onSiteSelect:vi.fn(),onLaneSelect:vi.fn()});for(const f of [...frames.values()])f(performance.now());frames.clear();const canvas=host.querySelector('canvas')!;expect(canvas.dataset.cameraPreset).toBe('full');renderer.update({...selected,autoSelectionZoom:true});for(const f of [...frames.values()])f(performance.now());frames.clear();expect(canvas.dataset.cameraPreset).toBe('selection-fit');expect(canvas.dataset.focusSites).toContain('B5');
+});

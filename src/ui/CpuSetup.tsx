@@ -97,13 +97,11 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
     try { const cpuPieces = generateCpuPlacement(2, seed); if (onStart(startGame(pieces, cpuPieces, seed % 2 === 0 ? 1 : 2)) === false) confirming.current = false; } catch { confirming.current = false; setNotice('対局を開始できませんでした。もう一度お試しください。'); }
   }
 
-  const primaryControls = <div className="setup-primary">
-    {selectedPiece && <div className="selection-panel"><strong>選択中：{PIECES[selectedPiece.type].label}（{selected}）・交換可能 {targets.length}地点</strong><button className="secondary" onClick={() => { setSelected(null); setNotice('選択を解除しました。'); }}>選択を解除</button></div>}
-    <button className="primary" disabled={!valid} onClick={confirm}>この配置で確定</button>
-  </div>;
+  const [saveRequested,setSaveRequested]=useState(0);
+  const primaryControls=<div className="setup-primary">{selectedPiece && <div className="selection-panel"><strong>選択中：{PIECES[selectedPiece.type].label}（{selected}）・交換可能 {targets.length}地点</strong><button className="secondary" onClick={() => { setSelected(null); setNotice('選択を解除しました。'); }}>選択を解除</button></div>}<button className="primary wide desktop-confirm" disabled={!valid} onClick={confirm}>この配置で確定</button></div>;
   const commands = <CommandDeck>
     <p className="next-action" role="status">{selectedPiece?`${PIECES[selectedPiece.type].label}を選択中。金枠の入れ替え先を選ぶ → 自作陣形を保存 → 配置確定。`:'次の操作：駒を2枚選んで交換。整ったら「現在の配置を保存」、最後に「この配置で確定」。'}</p>
-    <FormationLibrary pieces={pieces} onApply={next => { validatePlacement(next,1); setPieces([...next]); setSelected(null); setFormation(''); const saved=onPlacementChange?.(next); const draft=store.save(1,next); setNotice(saved !== false && draft ? '自作陣形を適用して配置を保存しました。' : '配置は適用しましたが、自動保存できませんでした。'); }} />
+    <FormationLibrary saveRequested={saveRequested} pieces={pieces} onApply={next => { validatePlacement(next,1); setPieces([...next]); setSelected(null); setFormation(''); const saved=onPlacementChange?.(next); const draft=store.save(1,next); setNotice(saved !== false && draft ? '自作陣形を適用して配置を保存しました。' : '配置は適用しましたが、自動保存できませんでした。'); }} />
     <label className="formation-control">陣形を変更 <select aria-label="陣形を変更" value={formation} onChange={event => changeFormation(event.target.value)}><option value="">現在の配置</option><optgroup label="標準陣形">{FORMATION_TEMPLATES.map(template => <option key={template.id} value={template.id}>{{ balanced: '攻守分担', rush: '速攻', defense: '守備重視', 'flag-guard': '軍旗防御' }[template.category]} {template.id.endsWith('-left') ? '左' : '右'}</option>)}</optgroup></select></label>
     <p className="notice" role="status">{notice}</p>
     <details className="inventory"><summary>自軍の駒一覧・枚数を見る</summary><p>23枚はすべて盤面に配置済みです。駒の名前から選ぶこともできます。</p><div className="inventory-grid">{PIECE_TYPES.map(type => {
@@ -118,12 +116,12 @@ export function CpuSetup({ difficulty, seed, onStart, store = cpuDraftStore, ini
     <RuleReference side="left" placement />
     <div className="setup-main">
     <div className="section-heading"><div><p className="eyebrow">01 / 初期配置</p><h2>あなたの陣形</h2></div><span className="badge">{placed} / 23枚配置済み</span></div>
-    <BattlefieldView commands={commands} primaryControls={!fallback ? primaryControls : undefined} state={battlefield} onSiteSelect={select} onLaneSelect={() => {}} onDragStart={site => { setSelected(site); setNotice('金枠へドラッグして交換できます。'); }} onPieceDrop={(from, to) => {
-      swap(from, to);
-    }} onUnavailable={() => setFallback(true)} />
     <p className="muted">難易度：{difficulty === 'easy' ? 'かんたん' : 'ふつう'}。23地点は最初から埋まっています。駒を2枚選ぶと配置を交換できます。</p>
     <p className="setup-progress" role="status">{valid ? '✓ 配置完了。この配置で対局を始められます。' : `配置中：${placed} / 23枚`}</p>
 
+    <BattlefieldView primaryControls={!fallback?primaryControls:undefined} primaryCommands={open=><><button onClick={()=>{setSaveRequested(n=>n+1);open();}}>陣形保存</button><button className="primary" aria-label="この配置で確定" disabled={!valid} onClick={confirm}>配置確定</button>{selected&&<button aria-label="選択を解除" onClick={()=>{setSelected(null);setNotice('選択を解除しました。');}}>解除</button>}</>} commands={commands} state={battlefield} onSiteSelect={select} onLaneSelect={() => {}} onDragStart={site => { setSelected(site); setNotice('金枠へドラッグして交換できます。'); }} onPieceDrop={(from, to) => {
+      swap(from, to);
+    }} onUnavailable={() => setFallback(true)} />
     {fallback && <><p className="board-guide">下があなた側。B列・E列の境界が突破口です。</p><Board pieces={pieces} perspective={1} selected={selected} targets={targets} humanSide={1} onSelect={select} /><div className="board-legend" aria-label="盤面の記号"><span>太枠＝選択中</span><span>金枠＝交換可能</span><span>HQ＝司令部</span></div>{primaryControls}</>}
     </div>
     <RuleReference side="right" />

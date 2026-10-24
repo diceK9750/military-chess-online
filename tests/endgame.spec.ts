@@ -1,3 +1,4 @@
+import {openExtras} from './mobileControls';
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -41,11 +42,11 @@ for(const [width,height] of [[1920,1080],[1440,900],[1280,720],[430,932],[390,84
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath('endgame.png'),fullPage:true});
   const saved=await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY);
-  await page.getByRole('combobox',{name:'カメラの詳細視点'}).selectOption('last');
+  await page.getByRole('button',{name:'直前の手を追う',exact:true}).click();
   await expect(page.locator('canvas')).toHaveAttribute('data-camera-preset','last');
   await panel.getByRole('button',{name:'戦史再現',exact:true}).click();
   await expect(page.getByLabel('戦史再現',{exact:true})).toBeVisible();await expect(page.getByRole('status',{name:'対局結果'})).toHaveCount(0);
-  await page.getByRole('button',{name:'結果画面へ戻る'}).click();await expect(panel).toBeVisible();
+  await openExtras(page);await page.getByRole('button',{name:'結果画面へ戻る'}).click();await expect(panel).toBeVisible();
   expect(await page.evaluate(key=>localStorage.getItem(key),MATCH_STORAGE_KEY)).toBe(saved);
   await page.reload();await page.getByRole('button',{name:/続きから/}).click();await expect(panel).toBeVisible();
   await panel.getByRole('button',{name:'新しい対局',exact:true}).click();
@@ -60,7 +61,7 @@ test('result action exports and reloads the unchanged encrypted terminal match',
   const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'ファイルを保存'}).click()]);
   const buffer=await readFile((await download.path())!);expect(buffer.toString()).not.toContain(password);expect(buffer.toString()).not.toContain('initialPlacements');
   await expect(page.getByRole('status',{name:'対局結果'})).toBeVisible();
-  await page.getByRole('button',{name:'タイトルへ',exact:true}).click();
+  await openExtras(page);await page.getByRole('button',{name:'タイトルへ',exact:true}).click();
   await page.getByRole('button',{name:'保存した対局を読み込む'}).click();
   await page.getByLabel('対局ファイル').setInputFiles({name:download.suggestedFilename(),mimeType:'application/json',buffer});
   await page.getByLabel('パスワード',{exact:true}).fill(password);await page.getByRole('button',{name:'対局を読み込む'}).click();

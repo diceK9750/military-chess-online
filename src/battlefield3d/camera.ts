@@ -72,3 +72,31 @@ export function fullCameraDistance(aspect: number, top = false): number {
   }
   return 34;
 }
+
+/** Display-only fit. HQ contributes both physical halves, not an extra logical cell. */
+export function selectionFit(sites:readonly Site[],width:number,height:number,viewer:Player=1){
+  const points=sites.flatMap(site=>{const p=sitePoint(site),half=site.startsWith('HQ')?1:.52;return [-half,half].flatMap(dx=>[-.52,.52].flatMap(dz=>[0,1.6].map(y=>new Vector3(p.x+dx,y,p.z+dz))));});
+  if(!points.length)points.push(new Vector3());
+  const x=(Math.min(...points.map(p=>p.x))+Math.max(...points.map(p=>p.x)))/2,z=(Math.min(...points.map(p=>p.z))+Math.max(...points.map(p=>p.z)))/2;
+  const target=new Vector3(x,.6,z),camera=new PerspectiveCamera(42,width/height,.1,100),side=viewer===1?1:-1;
+  let distance=6;
+  for(;distance<34;distance+=.1){
+    camera.position.set(x,distance*.82,z+side*distance*.7);camera.lookAt(target);camera.updateMatrixWorld();
+    if(points.every(p=>{const v=p.clone().project(camera);return Math.abs(v.x)<=.9&&v.y<=1-2*Math.min(72,height*.15)/height&&v.y>=-1+32/height;}))break;
+  }
+  return {position:camera.position.clone(),target,distance};
+}
+
+/** Screen-space expansion only for legal targets; ties stay unselected. */
+export function closestTouchTarget<T>(x:number,y:number,targets:readonly {x:number;y:number;value:T}[],radius=22):T|undefined{
+  const sorted=targets.map(t=>({...t,d:Math.hypot(t.x-x,t.y-y)})).filter(t=>t.d<=radius).sort((a,b)=>a.d-b.d);
+  if(!sorted.length||sorted.length>1&&sorted[1].d-sorted[0].d<4)return undefined;
+  return sorted[0].value;
+}
+
+/** 42-degree aerial overview, fitted to HQ flags and the whole terrain. */
+export function aerialDistance(aspect:number){
+ const camera=new PerspectiveCamera(42,aspect,.1,100);
+ for(let d=8;d<=40;d+=.1){camera.position.set(d*.08,d*.8,d*.9);camera.lookAt(0,.3,0);camera.updateMatrixWorld();if([-3.8,3.8].every(x=>[-4.8,4.8].every(z=>[0,2.5].every(y=>{const v=new Vector3(x,y,z).project(camera);return Math.abs(v.x)<=.92&&Math.abs(v.y)<=.78;}))))return d;}
+ return 40;
+}

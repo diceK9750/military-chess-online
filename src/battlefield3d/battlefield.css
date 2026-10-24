@@ -251,7 +251,6 @@
   .battlefield-panel:has(.command-deck) .battlefield-stage { height:520px; }
 }
 .chronicle-event { margin:8px 0; padding:8px 10px; background:#30484a; border-left:3px solid #f7d57a; font-size:14px; }
-.chronicle-provenance { margin:4px 0 8px; padding:6px 10px; color:#d8e4dc; background:#1d3438; border:1px solid #58716b; border-radius:4px; font-size:12px; letter-spacing:.02em; }
 .chronicle-commentary { margin:8px 0; padding:12px 16px; border:1px solid #b9a16c; border-radius:8px; background:#f6efdc; color:#18343a; line-height:1.65; }
 .chronicle-commentary small { font-size:11px; font-weight:bold; }
 .chronicle-commentary h4 { margin:3px 0; font-size:20px; }
@@ -345,6 +344,93 @@
 .setup-ready {padding:8px;background:#e8f4eb;color:#245b42;font-weight:bold}
 .chronicle .battlefield-key {display:block}
 .piece-legend {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;padding:8px}
+.piece-legend div {padding:6px;border:1px solid #69807c;border-radius:5px}
+.piece-legend strong,.piece-legend span {display:block}
+.piece-legend span {font-size:12px}
+@media(max-width:600px){.formation-library {padding:8px}.formation-help {align-items:flex-start}.formation-preview {max-width:35%}.next-action {font-size:13px}.piece-legend {grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Mobile normal play is one visual viewport; secondary tools keep their state in a sheet. */
+:root {--app-visual-height:100dvh;--app-visual-top:0px;--battle-safe-top:env(safe-area-inset-top,0px);--battle-safe-bottom:env(safe-area-inset-bottom,0px)}
+.audio-menu {display:contents}.audio-menu>summary {display:none}.battlefield-extras {display:contents}
+.mobile-details[hidden] {display:none}
+@media(max-width:600px){
+ .app-shell--playing .audio-menu,.app-shell--setup .audio-menu {display:block;position:relative}
+ .app-shell--playing .audio-menu>summary,.app-shell--setup .audio-menu>summary {display:block;padding:3px 10px;cursor:pointer;font-size:12px}
+ .app-shell:has(.mobile-battlefield)>header {position:fixed;z-index:30;top:var(--app-visual-top);left:0;right:0;height:calc(34px + var(--battle-safe-top));padding:var(--battle-safe-top) 8px 0;margin:0;background:#f5f3ed;flex-wrap:nowrap}
+ .app-shell:has(.mobile-battlefield)>header .brand {gap:4px;font-size:12px}.app-shell:has(.mobile-battlefield)>header .brand-mark {font-size:16px;width:23px;height:26px}.app-shell:has(.mobile-battlefield)>header .brand small {display:none}
+ .app-shell--playing .audio-menu[open] .audio-controls,.app-shell--setup .audio-menu[open] .audio-controls {position:absolute;right:0;top:100%;width:min(360px,94vw);padding:12px;background:#fff9e9;border:1px solid #a49167;border-radius:8px;box-shadow:0 8px 20px #0005;display:flex;flex-wrap:wrap}
+ .app-shell:has(.mobile-battlefield)>main>.save-error {position:fixed;z-index:31;top:calc(var(--app-visual-top) + 34px + var(--battle-safe-top));left:5px;right:5px;font-size:12px}
+ .app-shell:has(.mobile-battlefield) {overflow:hidden;height:var(--app-visual-height);padding:0;overscroll-behavior:none}
+ .app-shell:has(.mobile-battlefield) .cpu-banner,.app-shell:has(.mobile-battlefield) footer,.app-shell:has(.mobile-battlefield) .rule-reference {display:none}
+ .mobile-battlefield {position:fixed;z-index:10;top:calc(var(--app-visual-top) + 34px + var(--battle-safe-top));left:0;right:0;height:calc(var(--app-visual-height) - 34px - var(--battle-safe-top));border-radius:0;padding-bottom:var(--battle-safe-bottom);gap:0;overflow:hidden;overscroll-behavior:contain}
+ .mobile-battlefield .battlefield-header {order:1;flex:0 0 30px;min-height:30px;padding:2px 8px;gap:4px}.mobile-battlefield .battlefield-header>button {display:none}.mobile-battlefield .battlefield-header strong {font-size:12px}.mobile-battlefield .battlefield-turn {font-size:12px;padding:2px 5px}
+ .mobile-battlefield .battlefield-stage {order:2;height:auto!important;min-height:0!important;flex:1 1 0!important}
+ .mobile-battlefield .battlefield-cameras {order:3;flex:0 0 48px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px;padding:2px 5px;flex-wrap:nowrap}
+ .mobile-battlefield .battlefield-cameras button {min-height:44px;padding:2px;font-size:12px;white-space:nowrap;min-width:0}
+ .mobile-battlefield>.battlefield-next,.mobile-battlefield>.battlefield-guide,.mobile-battlefield>.battlefield-selection {display:none}
+ .mobile-primary {order:4;flex:0 0 auto;padding:3px 5px;background:#122a30}
+ .mobile-primary-row,.mobile-lanes {display:flex;gap:4px}.mobile-primary-row>button,.mobile-lanes>button {flex:1;min-width:0;min-height:44px;font-size:14px;padding:4px}.mobile-primary-row .primary {background:#f2d17a;color:#1b3030}
+ .mobile-lanes {margin-bottom:4px}.mobile-operation {display:block;padding:2px 4px;font-size:12px;line-height:1.4;min-height:21px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .mobile-details {position:absolute;z-index:8;left:5px;right:5px;bottom:calc(var(--battle-safe-bottom) + 78px);max-height:75%;overflow:auto;overscroll-behavior:contain;background:#183239;border:2px solid #b69b5b;border-radius:12px;padding:8px;box-shadow:0 0 0 100vmax #0003}
+ .mobile-sheet-header {display:flex;justify-content:space-between;align-items:center;gap:8px;position:sticky;top:-8px;background:#183239;z-index:2;padding:4px}.mobile-sheet-header button {min-height:44px}
+ .mobile-details .desktop-confirm,.mobile-details .selection-panel>button,.mobile-details .confirm,.mobile-details .move-prompt,.mobile-details .first-guide {display:none}
+ .mobile-details .rule-reference {display:block!important;position:static;color:#203a35;background:#fff9e9;width:auto}
+ .mobile-rules {padding:8px}.mobile-rules summary {min-height:44px;cursor:pointer}
+ .mobile-battlefield .battlefield-result {max-height:calc(100% - 80px);overflow:auto}
+ .mobile-battlefield .battlefield-hq strong {font-size:11px}.mobile-battlefield .battlefield-hq small {font-size:9px}
+}
+
+/* The chronicle is a viewing room: terrain, verified narration and transport. */
+.television .chronicle-heading{padding:.3rem .7rem;margin:0;background:#152f36;color:#f7e6b5}
+.television .chronicle-heading h3{font-size:1.15rem;margin:.1rem 0}
+.chronicle-theater{display:grid;grid-template-columns:minmax(0,1fr)280px;gap:.5rem;background:#142e34}
+.chronicle-theater>.battlefield-header,.chronicle-theater>.battlefield-cameras,.chronicle-theater>.theater-playback,.chronicle-theater>.battlefield-extras{grid-column:1/-1}
+.chronicle-theater>.battlefield-stage{grid-column:1;grid-row:3;height:clamp(380px,65dvh,760px)!important;min-height:0}
+.theater-narrator{grid-column:2;grid-row:3;min-width:0;background:#203b42;color:#f7e9cd;border-left:3px solid #d4b568;padding:.4rem;overflow:auto}
+.theater-narrator .chronicle-commentary{margin:0}
+.chronicle-theater .battlefield-next,.chronicle-theater .battlefield-guide,.chronicle-theater .battlefield-selection{display:none}
+.theater-playback{background:#203b42;padding:.35rem .6rem;border-top:1px solid #9b8650}
+.theater-chapter{position:absolute;top:52px;left:10px;right:10px;z-index:3;pointer-events:none;display:flex;gap:.3rem;flex-direction:column;align-items:flex-start;text-shadow:0 2px 3px #000}
+.theater-chapter small{background:#152a30e8;color:#ffe395;padding:.15rem .55rem;border-left:4px solid #d6b768}
+.theater-chapter strong{font-size:clamp(1rem,1.4vw,1.4rem);color:#fff7dc}
+.theater-lower-third{position:absolute;bottom:10px;left:10px;right:10px;z-index:3;pointer-events:none;display:flex;flex-direction:column;padding:.4rem .7rem;background:#132b32ed;color:#fff4d4;border-left:5px solid #e8c270;box-shadow:0 4px 16px #0005}
+.theater-lower-third strong{font-size:clamp(.85rem,1.2vw,1.15rem)}
+.theater-lower-third small{color:#f1d992}
+.theater-intro{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#101d21f5;color:#f9e5b1;text-align:center;padding:1rem;animation:theater-intro 2.5s both}
+.theater-intro h3{font-size:clamp(1.5rem,3vw,2.6rem);margin:.6rem 0}
+.theater-intro p{margin:.25rem 0}
+.theater-intro button{margin-top:.9rem;min-height:44px}
+@keyframes theater-intro{0%{opacity:0}10%,80%{opacity:1}100%{opacity:0}}
+.chronicle-theater .cinema-summary{top:50%;bottom:auto;transform:translateY(-50%);max-width:580px;left:12%;right:12%;background:#152c32ee;border:2px solid #eed38a}
+.chronicle-theater .cinema-summary span{font-size:.88rem}
+@media(max-width:600px){
+ .television>.chronicle-heading{display:none}
+ .mobile-battlefield.chronicle-theater{display:flex;gap:0}
+ .mobile-battlefield.chronicle-theater>.battlefield-stage{height:auto!important;grid-row:auto;flex:1 1 0!important}
+ .mobile-battlefield .theater-chapter{top:48px;left:8px;right:8px}
+ .mobile-battlefield .theater-chapter small{font-size:.7rem}
+ .mobile-battlefield .theater-chapter strong{font-size:.95rem}
+ .mobile-battlefield .theater-lower-third{bottom:8px;left:6px;right:6px;padding:.3rem .45rem}
+ .mobile-battlefield .theater-lower-third strong{font-size:.75rem;line-height:1.45}
+ .mobile-battlefield .theater-lower-third small{font-size:.7rem}
+ .mobile-battlefield .cinema-summary{left:5%;right:5%;padding:.7rem;max-height:50%;overflow:auto}
+ .mobile-battlefield .cinema-summary strong{font-size:1.4rem}
+ .mobile-battlefield .chronicle-controls{display:flex;flex-wrap:wrap}
+ .mobile-battlefield .chronicle-slider{display:flex}
+}
+@media(prefers-reduced-motion:reduce){.theater-intro{animation:none}}.chronicle-theater .command-deck{grid-column:1/-1}
+.chronicle-theater .battlefield-stage:has(canvas[data-marching="true"]) .cinema-summary{visibility:hidden}
+@media(max-width:600px){
+ .mobile-battlefield>.theater-playback{order:4;flex:0 0 auto;padding:2px 8px}
+ .mobile-battlefield .theater-playback .chronicle-controls{gap:4px;min-height:30px;margin:0;justify-content:space-between}
+ .mobile-battlefield .theater-playback .chronicle-controls label{display:flex;align-items:center;gap:4px;font-size:12px}
+ .mobile-battlefield .theater-playback .chronicle-controls select{min-height:32px;padding:3px;font-size:12px}
+ .mobile-battlefield .theater-playback .chronicle-controls span{font-size:11px}
+ .mobile-battlefield .theater-playback .chronicle-slider{font-size:11px;align-items:center;gap:4px;margin:0;height:22px}
+ .mobile-battlefield .theater-playback .chronicle-slider input{flex:1;min-width:0;margin:0}
+}
+@media(max-width:600px){.mobile-battlefield .theater-playback .chronicle-controls{flex-wrap:nowrap;padding:0;border:0}.mobile-battlefield .theater-playback .chronicle-controls span{width:auto;margin:0;white-space:nowrap}.mobile-battlefield .theater-playback .chronicle-controls label{flex-shrink:0}}
+
 .piece-legend > .piece-legend-entry {min-width:0;padding:8px;border:1px solid #69807c;border-radius:5px}
 .piece-legend-entry > strong {display:block;margin-bottom:5px}
 .piece-legend .piece-face {display:flex;flex-direction:row;justify-content:flex-start;gap:7px;text-align:left;white-space:normal}
@@ -356,111 +442,11 @@
 .piece-legend-insignia--pale {color:#9ce3ef}
 .piece-legend-marks {font-size:16px;line-height:1.2;letter-spacing:2px}
 .piece-legend-hint {display:block;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
-@media(max-width:600px){.formation-library {padding:8px}.formation-help {align-items:flex-start}.formation-preview {max-width:35%}.next-action {font-size:13px}.piece-legend {grid-template-columns:repeat(2,minmax(0,1fr))}}
 
-/* Mobile command viewport: canvas first, touch-safe essentials below, detail below the fold. */
-.battlefield-viewport { display:flex; flex-direction:column; min-width:0; }
-.battlefield-viewport > .battlefield-hq { position:static; padding:0 8px 4px; flex-shrink:0; }
-.battlefield-hq span { flex:1; min-width:0; }
-.battlefield-panel > .battlefield-last { position:static; margin:6px; }
-.battlefield-cameras { display:grid; grid-template-columns:auto auto minmax(90px,1fr) auto; flex-wrap:nowrap; align-items:center; gap:4px; padding:5px 8px; }
-.battlefield-cameras button { min-width:0; min-height:44px; padding:5px 7px; white-space:nowrap; }
-.camera-select { display:flex; gap:4px; align-items:center; font-size:11px; min-width:0; }
-.camera-select select { display:block; width:100%; min-width:0; min-height:44px; margin:0; padding:4px; color:#f8f0dc; background:#283e42; font-size:12px; }
-.battlefield-primary { padding:4px 8px 7px; background:#102b32; border-top:1px solid #6b827c; }
-.battlefield-primary .battlefield-selection { padding:0 0 4px; min-height:24px; font-weight:bold; }
-.battlefield-primary .confirm, .battlefield-primary .move-prompt, .battlefield-primary .selection-panel { margin:0; color:#eff7ef; background:transparent; border:0; padding:0; }
-.battlefield-primary .confirm h3 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
-.battlefield-primary .confirm > p:not(.battle-warning) { display:none; }
-.battlefield-primary .confirm .battle-warning { font-size:12px; margin:0 0 4px; padding:3px 6px; color:#ffe7b1; background:#4d3425; }
-.battlefield-primary .confirm .actions { display:grid; grid-template-columns:1fr 1fr 1.3fr; gap:5px; }
-.battlefield-primary button, .battlefield-primary .confirm .actions button { min-height:44px; min-width:0; padding:5px 7px; font-size:12px; }
-.battlefield-primary .primary { background:#efd181; color:#142e33; margin:0; }
-.battlefield-primary .confirm fieldset { display:flex; align-items:center; gap:12px; margin:0 0 4px; padding:0 8px; min-width:0; border-color:#70817a; }
-.battlefield-primary .confirm fieldset legend { font-size:11px; }
-.battlefield-primary .confirm fieldset label { display:flex; align-items:center; gap:6px; min-height:40px; font-size:12px; }
-.battlefield-primary .confirm fieldset input { margin:0; }
-.battlefield-primary .move-prompt .notice { margin:0; padding:0; font-size:12px; }
-.battlefield-primary .selection-panel strong { font-size:12px; }
-.setup-primary { display:flex; align-items:center; gap:8px; }
-.setup-primary > .selection-panel { flex:1; }
-.setup-primary > .primary { margin-left:auto; flex-shrink:0; }
-.battlefield-overview { position:absolute; z-index:1; right:6px; bottom:6px; width:76px; padding:3px; border:1px solid #9eb8a4; border-radius:6px; background:#10242cf0; pointer-events:none; color:#e0eee5; }
-.battlefield-overview svg { display:block; width:100%; height:86px; }
-.battlefield-overview small { display:block; font-size:8px; line-height:1.25; text-align:center; }
-.audio-controls { padding:8px 0; }
-@media (max-width:600px) and (orientation:portrait) {
-  .app-shell--setup, .app-shell--playing { padding-left:max(5px,env(safe-area-inset-left)); padding-right:max(5px,env(safe-area-inset-right)); padding-top:env(safe-area-inset-top); }
-  .app-shell--setup > header, .app-shell--playing > header { padding:3px 5px; min-height:42px; height:42px; }
-  .app-shell--setup .brand-mark, .app-shell--playing .brand-mark { width:28px; height:32px; font-size:18px; }
-  .app-shell--setup .brand, .app-shell--playing .brand { font-size:14px; }
-  .app-shell--setup .brand small, .app-shell--playing .brand small { display:none; }
-  .app-shell--setup > main, .app-shell--playing > main { padding:0; }
-  .app-shell--setup .section-heading, .app-shell--playing .section-heading { height:31px; padding:2px 6px; gap:5px; }
-  .app-shell--setup .section-heading h2, .app-shell--playing .section-heading h2 { font-size:15px; margin:0; }
-  .app-shell--setup .section-heading .eyebrow, .app-shell--playing .section-heading .eyebrow { display:none; }
-  .app-shell--setup .badge, .app-shell--playing .badge { font-size:11px; padding:1px 8px; }
-  .setup-layout, .play-layout { margin:0; gap:0; }
-  .battlefield-panel { border-radius:7px; }
-  .battlefield-viewport { height:calc(var(--battlefield-height, 100dvh - 76px) - env(safe-area-inset-bottom)); min-height:430px; padding-bottom:2px; }
-  .battlefield-panel:has(.command-deck) .battlefield-viewport > .battlefield-stage { flex:1 1 0; min-height:120px; height:auto; }
-  .battlefield-header { min-height:27px; padding:2px 7px; flex-shrink:0; }
-  .battlefield-header strong, .battlefield-turn { font-size:11px; }
-  .battlefield-turn { padding:1px 5px; }
-  .battlefield-viewport > .battlefield-hq { padding:0 5px 3px; gap:5px; }
-  .battlefield-hq span { flex-direction:row; align-items:center; gap:4px; padding:2px 4px; font-size:10px; line-height:1.3; }
-  .battlefield-hq small { font-size:9px; }
-  .battlefield-cameras { padding:4px 5px; gap:4px; }
-  .battlefield-cameras button { font-size:10px; padding:3px 5px; }
-  .camera-select { font-size:0; gap:0; }
-  .camera-select select { font-size:11px; }
-  .battlefield-primary { padding:3px 5px 5px; }
-  .battlefield-primary .battlefield-selection { font-size:11px; line-height:1.4; }
-  .battlefield-primary .move-prompt .notice { font-size:11px; line-height:1.3; }
-  .battlefield-primary .setup-primary .selection-panel strong { display:none; }
-  .battlefield-primary .setup-primary .selection-panel { flex:0 0 auto; }
-  .battlefield-primary .setup-primary > .primary { flex:1; }
-  .battlefield-lanes { display:none; } /* The primary confirmation retains its accessible C/D radios. */
-  .battlefield-error .battlefield-viewport { height:auto; min-height:0; }
-  .battlefield-error .battlefield-viewport > .battlefield-stage:not(:has(.battlefield-result)) { flex:0 0 45px !important; min-height:45px !important; }
-  .battlefield-error .battlefield-primary { display:none; }
-  .chronicle { padding:0; border:0; }
-  .chronicle-heading h3 { font-size:15px; margin:2px 5px; }
-  .chronicle-heading p, .chronicle-heading small { display:none; }
-  .chronicle-event { margin:2px 5px; font-size:11px; }
-  .chronicle .battlefield-primary .battlefield-selection { display:none; }
-  .chronicle .chronicle-controls { margin:0; padding:0; border:0; display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:4px; }
-  .chronicle .chronicle-controls label { display:flex; align-items:center; gap:4px; grid-column:1 / 3; }
-  .chronicle .chronicle-controls label select { width:auto; margin:0; }
-  .chronicle .chronicle-controls span { font-size:10px; }
-  .chronicle .chronicle-slider { font-size:11px; gap:6px; }
-  .chronicle .chronicle-slider input { min-height:30px; margin:0; }
-}
-.cinema-cue { margin:0 0 4px; font-size:12px; font-weight:bold; color:#ffe3a6; }
-.battlefield-primary .chronicle-controls label, .battlefield-primary .chronicle-controls span { color:#eff7ef; }
-@media (max-width:600px) and (orientation:portrait) {
-  .chronicle .cinema-cue { font-size:11px; }
-  .chronicle .chronicle-controls select { min-height:36px; padding:3px; }
-}
-/* Keep the overview off the canvas so it cannot cover a legal destination. */
-.battlefield-primary.has-overview { position:relative; padding-right:76px; min-height:94px; }
-.battlefield-primary .battlefield-overview { top:4px; bottom:auto; right:5px; width:63px; }
-.battlefield-primary .battlefield-overview svg { height:66px; }
-@media (max-width:600px) and (orientation:portrait) {
-  .battlefield-primary.has-overview { padding-right:66px; min-height:88px; }
-  .battlefield-primary .battlefield-overview { width:55px; }
-  .battlefield-primary .battlefield-overview svg { height:60px; }
-}
-.battlefield-primary .move-prompt .notice { background:transparent; color:inherit; }
+.battlefield-primary{position:relative}.battlefield-overview{width:63px;padding:3px;border:1px solid #9eb8a4;border-radius:5px;background:#10242c;color:#e0eee5}.battlefield-overview svg{width:100%;height:56px;display:block}.battlefield-overview small{display:block;font-size:8px;text-align:center}.mobile-primary.has-overview{position:relative;padding-right:76px}.mobile-primary>.battlefield-overview{position:absolute;right:5px;top:3px;pointer-events:none}.theater-lower-third{margin:0}
 
-.battlefield-primary .confirm fieldset legend { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.television:not(.has-fallback){display:block}
 
-/* Terminal actions must grow with their text instead of being clipped by the live-play budget. */
-@media (max-width:600px) and (orientation:portrait) {
-  .battlefield-viewport:has(.battlefield-result) { height:auto; min-height:0; }
-  .battlefield-panel:has(.command-deck) .battlefield-viewport > .battlefield-stage:has(.battlefield-result) { flex:0 0 auto; height:auto; min-height:380px; overflow:visible; padding:8px; }
-  .battlefield-viewport .battlefield-stage .battlefield-result { position:relative; left:auto; bottom:auto; transform:none; width:auto; max-width:none; margin:0; }
-  .battlefield-stage:has(.battlefield-result) > canvas { position:absolute; inset:0; }
-  .battlefield-error .battlefield-viewport > .battlefield-stage:has(.battlefield-result) { min-height:0; padding-top:45px; }
-  .battlefield-error .battlefield-stage:has(.battlefield-result) > .battlefield-status { inset:0 0 auto; height:45px; padding:5px; font-size:11px; }
-}
+.mobile-primary.has-overview{min-height:92px}
+
+.battlefield-overview small{line-height:1.2}.battlefield-overview svg{height:48px}

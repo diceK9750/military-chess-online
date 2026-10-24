@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PerspectiveCamera, Vector3 } from 'three';
+import { Vector3 } from 'three';
+import { displayedCamera } from './battlefieldCamera';
 import { sitePoint } from '../src/battlefield3d/state';
 import { defaultPlacement } from '../src/dev/fixtures';
 import { applyMove, startGame } from '../src/game/game';
@@ -14,10 +15,7 @@ const canvasName='操作可能な三次元戦場';
 const canvas=(page:Page)=>page.getByRole('img',{name:canvasName});
 async function point(page:Page,site:Site,height=.31,offset=0) {
   await canvas(page).scrollIntoViewIfNeeded();
-  const b=(await canvas(page).boundingBox())!,c=new PerspectiveCamera(42,b.width/b.height,.1,100);
-  const pose=(await canvas(page).getAttribute('data-camera-pose'))?.split('/').map(Number);
-  expect(pose,'renderer exposes camera position and target').toHaveLength(6);expect(pose!.every(Number.isFinite)).toBe(true);
-  c.position.set(pose![0],pose![1],pose![2]);c.lookAt(pose![3],pose![4],pose![5]);c.updateMatrixWorld();
+  const b=(await canvas(page).boundingBox())!,c=await displayedCamera(canvas(page),b.width,b.height);
   const p=sitePoint(site),v=new Vector3(p.x+offset,height,p.z).project(c);
   return {x:b.x+(v.x+1)*b.width/2,y:b.y+(1-v.y)*b.height/2};
 }
@@ -46,32 +44,19 @@ async function saved(page:Page) { return page.evaluate(()=>JSON.parse(localStora
 
 test('fixed presets, selection focus and cancellation never alter the setup',async({page,isMobile})=>{
   await setup(page);const before=await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'));
-  const detail=page.getByRole('combobox',{name:'カメラの詳細視点'});
-  await expect(detail.locator('option[value="last"]')).toHaveJSProperty('disabled', true);
-  await expect(detail.locator('option[value="selected"]')).toHaveJSProperty('disabled', true);
-  await expect(page.locator('.battlefield-cameras button')).toHaveCount(3);
-  for(const preset of ['front','enemy','top','full']){
-    await detail.selectOption(preset);await expect(detail).toHaveValue(preset);
-    await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
+  await expect(page.getByRole('button',{name:'直前の手を追う'})).toBeDisabled();
+  for(const [name,preset] of [['自軍正面','front'],['敵軍正面','enemy'],['真上','top'],['全景','full']]){
+    const button=page.getByRole('button',{name,exact:true});await button.click();
+    await expect(button).toHaveAttribute('aria-pressed','true');await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
   }
-  const overviewPose=await canvas(page).getAttribute('data-camera-pose');
-  await tap(page,'B1',!!isMobile);
-  await expect(canvas(page)).toHaveAttribute('data-camera-preset','selected');
-  await expect(canvas(page)).not.toHaveAttribute('data-camera-pose',overviewPose!);
-  await expect(detail).toHaveValue('selected');
-  await expect(page.getByRole('complementary',{name:'全体位置図・自軍が下'})).toBeVisible();
-  await page.getByRole('button',{name:'全景',exact:true}).click();
-  await expect(canvas(page)).toHaveAttribute('data-camera-pose',overviewPose!);
-  await expect(page.locator('.selection-panel')).toContainText('B1');
-  await expect(page.getByRole('complementary',{name:'全体位置図・自軍が下'})).toHaveCount(0);
-  await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
-  await expect(canvas(page)).toHaveAttribute('data-camera-preset','selected');
+  await tap(page,'B1',!!isMobile);await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
+  await expect(canvas(page)).toHaveAttribute('data-camera-preset',isMobile?'selection-fit':'selected');
   await page.getByRole('button',{name:'選択を解除',exact:true}).click();
   await expect(canvas(page)).toHaveAttribute('data-camera-preset','full');
   await expect(page.getByRole('button',{name:'全景',exact:true})).toHaveAttribute('aria-pressed','true');
   expect(await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'))).toBe(before);
 });
-test('blank touch drag scrolls the page without camera rotation or setup change',async({page})=>{
+test('blank touch drag preserves the one-screen viewport, camera and setup',async({page})=>{
   await page.setViewportSize({width:390,height:844});await setup(page);await canvas(page).scrollIntoViewIfNeeded();
   const before=await page.evaluate(()=>({scroll:scrollY,setup:localStorage.getItem('military-chess:cpu-setup:v1')}));
   const pose=await canvas(page).getAttribute('data-camera-pose'),b=(await canvas(page).boundingBox())!,x=b.x+8,y=b.y+b.height*.5;
@@ -79,7 +64,7 @@ test('blank touch drag scrolls the page without camera rotation or setup change'
   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y,id:1}]});
   for(let i=1;i<=6;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-i*12,id:1}]});
   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
-  expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(before.scroll);
+  expect(await page.evaluate(()=>scrollY)).toBe(before.scroll);
   expect(await page.evaluate(()=>localStorage.getItem('military-chess:cpu-setup:v1'))).toBe(before.setup);
   await expect(canvas(page)).toHaveAttribute('data-camera-pose',pose!);await expect(page.locator('.selection-panel')).toHaveCount(0);
 });
@@ -131,8 +116,8 @@ test('3D drag executes official move once, CPU replies, save/resume and retap re
   const after=await saved(page);expect(after.game.events.filter((e:{kind:string})=>e.kind==='MOVE').slice(-2)[0].move).toEqual(move);
   await expect(canvas(page)).not.toHaveAttribute('data-battle-effect',/./);await page.waitForTimeout(400);
   const next=legalMoves(after.game.pieces,1)[0];await tap(page,next.from,!!isMobile);await tap(page,next.to,!!isMobile);
-  if(next.lane){const lane=page.getByRole('radio',{name:next.lane+'列を通る'});if(await lane.count())await lane.check();}
-  await expect(page.locator('.confirm')).toBeVisible();await tap(page,next.to,!!isMobile);
+  if(next.lane)await page.getByRole('button',{name:'三次元 '+next.lane+'列'}).click();
+  await expect(page.getByRole('button',{name:'確定して実行',exact:true})).toBeEnabled();await tap(page,next.to,!!isMobile);
   await expect.poll(async()=> (await saved(page)).game.moveCount).toBe(after.game.moveCount+2);
   await expect(canvas(page)).not.toHaveAttribute('data-battle-effect',/./);await page.waitForTimeout(400);
   const final=await saved(page);await page.screenshot({path:info.outputPath('operation.png'),fullPage:true});

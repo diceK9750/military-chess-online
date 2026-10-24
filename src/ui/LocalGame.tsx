@@ -16,6 +16,7 @@ import { inferEnemies } from '../intelligence/inference';
 import { Chronicle } from './Chronicle';
 import { CommandDeck } from './CommandDeck';
 import { playCue, playVictory } from './sound';
+import {useMobileScreen} from '../battlefield3d/viewport';
 
 const reasons: Record<EndReason, string> = { HQ_CAPTURE: '敵司令部を占領', CAPTURERS_ELIMINATED: '片側の占領可能駒が全滅', BOTH_CAPTURERS_ELIMINATED: '双方の占領可能駒が全滅', NO_LEGAL_MOVES_BOTH: '双方に合法手なし', FIFTY_NONCOMBAT_MOVES: '戦闘なし50手' };
 function reasonText(result: Result, mode: 'debug' | 'cpu'): string {
@@ -60,7 +61,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
   const [fallback, setFallback] = useState(false);
   const [intelligence, setIntelligence] = useState(readIntelligence);
   const [analysisSite, setAnalysisSite] = useState<Site|null>(null);
-  const [replaying,setReplaying]=useState(false);
+  const [replaying,setReplaying]=useState(false);const mobile=useMobileScreen();
   const replayFocusReturn = useRef(false);
   const moveFocusReturn = useRef(false);
   const gameHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -198,7 +199,7 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
       {chosen && <p className="muted">移動先をもう一度押しても確定できます。</p>}
       <div className="actions"><button className="secondary" disabled={animating || cpuThinking} onClick={() => { setPending([]); setLane(undefined); gameHeadingRef.current?.focus(); }}>選び直す</button><button className="secondary" disabled={animating || cpuThinking} onClick={cancel}>選択を解除</button><button className="primary" disabled={!chosen || animating || cpuThinking} onClick={execute}>確定して実行</button></div>
     </div> : !game.result && <div className="move-prompt"><p className="notice" role="status">{cpuThinking ? cpuFailed ? 'コンピューターの着手が停止しています。再試行してください。' : 'コンピューターが考えています。' : notice || (selectedPiece ? `${PIECES[selectedPiece.type].label}（${selected}）を選択中。金枠の移動先を選んでください。` : '自分の駒を選ぶと、移動できる地点を金枠で表示します。')}</p>{selected && !cpuThinking && <button className="secondary" disabled={animating || cpuThinking} onClick={cancel}>選択を解除</button>}</div>;
-  const commands = <CommandDeck><div className="actions command-utilities">{onSave && <button onClick={onSave}>対局を保存</button>}{onTitle && <button onClick={onTitle}>タイトルへ</button>}<button onClick={() => document.getElementById('audio-controls')?.scrollIntoView({block:'nearest'})}>音の設定</button></div>
+  const commands = <CommandDeck><div className="actions command-utilities">{onSave && <button onClick={onSave}>対局を保存</button>}{onTitle && <button onClick={onTitle}>タイトルへ</button>}<button onClick={() => {const menu=document.querySelector<HTMLDetailsElement>('.audio-menu');if(menu)menu.open=true;document.getElementById('audio-controls')?.scrollIntoView({block:'nearest'});}}>音の設定</button></div>
     {mode==='cpu'&&<Intelligence view={publicView} enabled={intelligence} hypotheses={hypotheses} focus={analysisSite} onFocus={setAnalysisSite} onToggle={()=>{playCue('analysis');setIntelligence(value=>{const next=!value;try{localStorage.setItem(INTELLIGENCE_KEY,String(next));}catch{/* Optional preference only. */}return next;});}} />}
     {mode==='cpu'&&guide&&!game.result&&<small className="first-guide">自軍→金枠→再タップ、または駒をドラッグ。視点はボタンで切り替え。</small>}
 <div className="play-main">
@@ -210,21 +211,24 @@ export function LocalGame({ initial, onChange, mode = 'debug', difficulty = 'eas
     {!fallback && selected && !pending.length && <details className="destination-list"><summary>移動先一覧（{new Set(targets).size}地点）</summary><div className="actions">{[...new Set(targets)].map(site => <button key={site} data-target={site} disabled={animating || cpuThinking} onClick={() => select(site)}>{site}</button>)}</div></details>}
     <details className="own-piece-list"><summary>自軍の駒から選ぶ</summary><div className="actions">{game.pieces.filter(piece => piece.owner === (mode === 'cpu' ? 1 : perspective) && piece.position !== null).map(piece => <button key={piece.id} type="button" data-own-site={piece.position!} aria-pressed={selected === piece.position} disabled={animating || cpuThinking || !!game.result || piece.owner !== game.turn} onClick={() => select(piece.position!)}><PieceFace type={piece.type} /><span>{piece.position}</span></button>)}</div></details>
     {error && <p role="alert">{error}</p>}
-    {cpuThinking && cpuFailed && <button type="button" onClick={retryCpu}>コンピューターの着手を再試行</button>}
+    {cpuThinking && cpuFailed && (!mobile||fallback) && <button type="button" onClick={retryCpu}>コンピューターの着手を再試行</button>}
 
     </div>
   </CommandDeck>;
+  const historyContent=<>
+    <details className="history" aria-label="対局履歴"><summary>対局履歴（{game.events.length}件）</summary><ol>{game.events.map((event, index) => <li key={index}>{eventText(event, mode)}</li>)}</ol>{!game.events.length && <p>検証用の盤面です。駒を選んで開始できます。</p>}</details>
+    {game.result && mode === 'cpu' && initialPlacements && <details className="postgame"><summary>終局後の全駒・初期配置・戦闘を確認</summary><p>この対局は終了したため、両軍の情報を表示します。</p>{([1, 2] as const).map(side => <div key={side}><h3>{side === 1 ? 'あなた' : 'コンピューター'}の初期配置</h3><ul>{initialPlacements[side === 1 ? 'p1' : 'p2'].map(piece => <li key={piece.id}>{piece.position}：{PIECES[piece.type].label}</li>)}</ul></div>)}<h3>戦闘の双方の駒種類</h3><ol>{battleDisclosures(game.events, [...initialPlacements.p1, ...initialPlacements.p2]).map((line, index) => <li key={index}>{line}</li>)}</ol><p>全着手は上の対局履歴で確認できます。</p></details>}
+  </>;
   if(game.result&&replaying&&initialPlacements)return <Chronicle onSave={onSave} onTitle={onTitle} game={game} initial={initialPlacements} onClose={()=>{replayFocusReturn.current=true;setReplaying(false);}}/>;
   return <section className="game-screen">
     <div className="section-heading"><div><p className="eyebrow">02 / {mode === 'cpu' ? '対CPU戦' : '開発用対局'}</p><h2 ref={gameHeadingRef} tabIndex={-1}>{game.result ? '対局終了' : cpuThinking ? 'CPUの手番' : mode === 'cpu' ? 'あなたの手番' : `P${game.turn}の手番`}</h2></div><span className="badge">{game.moveCount}手</span></div>
     <div className="triple-layout play-layout"><RuleReference side="left" /><div className={"game-surfaces" + (fallback ? " has-fallback" : "")}>
-<BattlefieldView commands={commands} primaryControls={!fallback ? primaryControls : undefined} state={battlefieldState} endgame={game.result ? { fresh: !openedFinished.current&&!celebrated, label: resultLabel!, reason: reasonText(game.result, mode), onNew: mode === 'cpu' ? onNewGame : undefined, onReplay: mode === 'cpu' && initialPlacements ? () => {setCelebrated(true);setReplaying(true);} : undefined, onSave } : undefined} onDragStart={dragStart} onPieceDrop={drop} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
+<BattlefieldView compactMode={mode==='cpu'} secondaryContent={historyContent} primaryCommands={()=><>{cpuFailed&&<button onClick={retryCpu} aria-label="コンピューターの着手を再試行">CPU再試行</button>}{!game.result&&<>{pending.length>0&&<button disabled={animating||cpuThinking} onClick={()=>{setPending([]);setLane(undefined);}}>選び直す</button>}<button aria-label="選択を解除" disabled={!selected||animating||cpuThinking} onClick={cancel}>解除</button><button className="primary" aria-label="確定して実行" disabled={!chosen||animating||cpuThinking} onClick={execute}>確定</button></>}</>} commands={commands} primaryControls={!fallback ? primaryControls : undefined} state={battlefieldState} endgame={game.result ? { fresh: !openedFinished.current&&!celebrated, label: resultLabel!, reason: reasonText(game.result, mode), onNew: mode === 'cpu' ? onNewGame : undefined, onReplay: mode === 'cpu' && initialPlacements ? () => {setCelebrated(true);setReplaying(true);} : undefined, onSave } : undefined} onDragStart={dragStart} onPieceDrop={drop} onSiteSelect={site => { if(intelligence&&publicView.pieces.some(p=>!p.known&&p.position===site))setAnalysisSite(site); battlefieldInput.current = true; select(site); }} onLaneSelect={column => { if (!animationBusy.current && !cpuThinking && !game.result && pending.some(move => move.lane === column)) setLane(column); }} onUnavailable={() => setFallback(true)} onAnimationChange={active => { animationBusy.current = active; setAnimating(active); }} />
     </div><RuleReference side="right" /></div>
     {cpuThinking && <p className="thinking" role="status">{cpuFailed ? 'コンピューターの着手が停止しています。軍議操作から再試行できます。' : 'コンピューターが考えています。盤面は着手後に操作できます。'}</p>}
     {latestMove?.kind === 'MOVE' && <p className="latest-event" role="status"><strong>直前の着手</strong><span>{eventText(latestMove, mode)}</span></p>}
     {latestPass && <p className="pass-event" role="status">{eventText(latestPass, mode)}</p>}
-    <details className="history" aria-label="対局履歴"><summary>対局履歴（{game.events.length}件）</summary><ol>{game.events.map((event, index) => <li key={index}>{eventText(event, mode)}</li>)}</ol>{!game.events.length && <p>検証用の盤面です。駒を選んで開始できます。</p>}</details>
-    {game.result && mode === 'cpu' && initialPlacements && <details className="postgame"><summary>終局後の全駒・初期配置・戦闘を確認</summary><p>この対局は終了したため、両軍の情報を表示します。</p>{([1, 2] as const).map(side => <div key={side}><h3>{side === 1 ? 'あなた' : 'コンピューター'}の初期配置</h3><ul>{initialPlacements[side === 1 ? 'p1' : 'p2'].map(piece => <li key={piece.id}>{piece.position}：{PIECES[piece.type].label}</li>)}</ul></div>)}<h3>戦闘の双方の駒種類</h3><ol>{battleDisclosures(game.events, [...initialPlacements.p1, ...initialPlacements.p2]).map((line, index) => <li key={index}>{line}</li>)}</ol><p>全着手は上の対局履歴で確認できます。</p></details>}
+    {(mode!=='cpu'||!mobile||fallback)&&historyContent}
   </section>;
 }
 

@@ -76,38 +76,20 @@ test('persisted edited placement is rendered directly on remount', async () => {
   await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(2));
   expect(latest().pieces).toEqual(visible); expect(document.querySelector('.board')).toBeNull();
 });
-test('compact camera toolbar keeps every preset and routes detail choices without saving', async () => {
-  const saved = store(); render(<CpuSetup difficulty="easy" seed={2} store={saved} onStart={vi.fn()} />); await ready();
-  const toolbar = within(document.querySelector('.battlefield-cameras') as HTMLElement);
-  expect(toolbar.getAllByRole('button').map(button => button.textContent)).toEqual(['全景', '選択中の駒', '視点を戻す']);
-  expect(toolbar.getByRole('button', { name: '選択中の駒' })).toBeDisabled();
-  const detail = toolbar.getByRole('combobox', { name: 'カメラの詳細視点' });
-  expect(within(detail).getAllByRole('option').map(option => option.textContent)).toEqual(['全景', '自軍正面', '敵軍正面', '真上', '選択中の駒', '直前の手を追う']);
-  expect(within(detail).getByRole('option', { name: '選択中の駒' })).toBeDisabled();
-  expect(within(detail).getByRole('option', { name: '直前の手を追う' })).toBeDisabled();
-  for (const preset of ['full', 'top', 'front', 'enemy']) {
-    fireEvent.change(detail, { target: { value: preset } });
-    expect(mock.camera).toHaveBeenLastCalledWith(preset); expect(detail).toHaveValue(preset);
-  }
-  act(() => input().onSiteSelect('B1'));
-  expect(within(detail).getByRole('option', { name: '選択中の駒' })).toBeEnabled();
-  fireEvent.change(detail, { target: { value: 'selected' } });
-  expect(mock.camera).toHaveBeenLastCalledWith('selected');
-  fireEvent.click(toolbar.getByRole('button', { name: '全景' }));
-  expect(mock.camera).toHaveBeenLastCalledWith('full');
-  fireEvent.click(toolbar.getByRole('button', { name: '選択中の駒' }));
-  expect(mock.camera).toHaveBeenLastCalledWith('selected');
-  fireEvent.click(toolbar.getByRole('button', { name: '視点を戻す' }));
-  expect(mock.reset).toHaveBeenCalledOnce(); expect(detail).toHaveValue('full');
-  expect(saved.save).not.toHaveBeenCalled();
+test('six camera buttons retain every preset without saving',async()=>{
+ const saved=store();render(<CpuSetup difficulty="easy" seed={2} store={saved} onStart={vi.fn()}/>);await ready();const toolbar=within(document.querySelector('.battlefield-cameras') as HTMLElement);
+ expect(toolbar.getAllByRole('button').map(b=>b.textContent)).toEqual(['全景','自軍正面','敵軍正面','真上','選択中の駒','直前の手を追う']);expect(toolbar.getByRole('button',{name:'選択中の駒'})).toBeDisabled();expect(toolbar.getByRole('button',{name:'直前の手を追う'})).toBeDisabled();
+ for(const [preset,name] of [['full','全景'],['top','真上'],['front','自軍正面'],['enemy','敵軍正面']]){fireEvent.click(toolbar.getByRole('button',{name}));expect(mock.camera).toHaveBeenLastCalledWith(preset);}
+ act(()=>input().onSiteSelect('B1'));fireEvent.click(toolbar.getByRole('button',{name:'選択中の駒'}));expect(mock.camera).toHaveBeenLastCalledWith('selected');fireEvent.click(screen.getByRole('button',{name:'視点を戻す'}));expect(mock.reset).toHaveBeenCalledOnce();expect(saved.save).not.toHaveBeenCalled();
 });
+
 test('renderer selection focus shows an orientation overview and clears without changing placement', async () => {
   const saved = store(); render(<CpuSetup difficulty="easy" seed={2} store={saved} onStart={vi.fn()} />); await ready();
   const before = latest().pieces;
   expect(screen.queryByRole('complementary', { name: '全体位置図・自軍が下' })).not.toBeInTheDocument();
   act(() => { input().onSiteSelect('B1'); input().onCameraChange?.('selected'); });
   expect(screen.getByRole('button', { name: '選択中の駒' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('combobox', { name: 'カメラの詳細視点' })).toHaveValue('selected');
+  expect(screen.getByRole('button',{name:'選択中の駒'})).toHaveAttribute('aria-pressed','true');
   expect(screen.getByRole('complementary', { name: '全体位置図・自軍が下' })).toHaveTextContent('自軍 ↓');
   const primary = within(document.querySelector('.battlefield-viewport .battlefield-primary') as HTMLElement);
   expect(primary.getByRole('button', { name: 'この配置で確定' })).toBeEnabled();

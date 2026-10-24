@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from 'react';
+import { useLayoutEffect, useEffect, useState, type RefObject } from 'react';
 
 /** Document-space top stays stable when a finger scrolls; browser chrome changes the available height. */
 export function viewportBudget(height: number, top: number): number {
@@ -27,3 +27,24 @@ export function useBattlefieldViewport(ref: RefObject<HTMLDivElement | null>) {
     return () => { window.removeEventListener('resize', schedule); window.visualViewport?.removeEventListener('resize', schedule); observer?.disconnect(); if (frame) cancelAnimationFrame(frame); };
   }, [ref]);
 }
+
+/** Visual viewport changes do not observe our own layout, so CSS writes cannot form a resize loop. */
+export function useVisualViewport(){
+ useEffect(()=>{
+  const viewport=window.visualViewport,root=document.documentElement;let raf=0;
+  const update=()=>{raf=0;const height=viewport?.height??window.innerHeight,top=viewport?.offsetTop??0;
+   if(Number.isFinite(height)&&height>0){const value=`${height}px`;if(root.style.getPropertyValue('--app-visual-height')!==value)root.style.setProperty('--app-visual-height',value);}
+   const offset=`${Math.max(0,top)}px`;if(root.style.getPropertyValue('--app-visual-top')!==offset)root.style.setProperty('--app-visual-top',offset);
+  };
+  const schedule=()=>{if(!raf)raf=requestAnimationFrame(update);};update();
+  window.addEventListener('resize',schedule);viewport?.addEventListener('resize',schedule);viewport?.addEventListener('scroll',schedule);
+  return()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',schedule);viewport?.removeEventListener('resize',schedule);viewport?.removeEventListener('scroll',schedule);root.style.removeProperty('--app-visual-height');root.style.removeProperty('--app-visual-top');};
+ },[]);
+}
+export function useMobileScreen(){
+ const [mobile,setMobile]=useState(()=>window.matchMedia?.('(max-width:600px)').matches??false);
+ useEffect(()=>{const media=window.matchMedia?.('(max-width:600px)');if(!media)return;const update=()=>setMobile(media.matches);update();media.addEventListener?.('change',update);return()=>media.removeEventListener?.('change',update);},[]);
+ return mobile;
+}
+export const SELECTION_ZOOM_KEY='military-chess:selection-zoom:v1';
+export function readSelectionZoom(){try{return localStorage.getItem(SELECTION_ZOOM_KEY)!=='false';}catch{return true;}}
