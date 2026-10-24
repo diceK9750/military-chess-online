@@ -69,3 +69,4 @@ Node >=22.12で `npm ci`、`npx playwright install chromium`、`npm run check`�
 - `npm ci`成功。先行重点試験はRTL 4件、配置／着手／回転6件、追加戦史5件が成功。全件試験・公開版検証の結果は完了時handoffと下記の最終結果に記録。
 - 実ブラウザ確認はChromiumとタッチ／画面サイズエミュレーション。実機Safari、キーボード、発熱・聴感は別途確認対象。
 - 最終検証: `npm run check -- -- --workers=2`終了コード0。型検査、Vitest/React Testing Library 40ファイル929件、本番ビルド、Playwright 214件が成功。合計1143件、失敗0。既存テストの削除・無効化なし。
+- 公開画像点検の追補: 配置一覧の案内を「交換先の選択で交換」「配置確定で対局開始」へ分離。案内文の検査を追加し、最終コードでも全929件＋214件、型検査・本番ビルド・`npm run check`成功を再確認。
