@@ -354,7 +354,7 @@
 .audio-menu {display:contents}.audio-menu>summary {display:none}.battlefield-extras {display:contents}
 .mobile-details[hidden] {display:none}
 .mobile-details .history,.mobile-details .postgame {color:#203a35;background:#fff9e9}
-@media(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px){
+@media(max-width:600px), (max-height:800px){
  .app-shell--playing .audio-menu,.app-shell--setup .audio-menu {display:block;position:relative}
  .app-shell--playing .audio-menu>summary,.app-shell--setup .audio-menu>summary {display:block;padding:3px 10px;cursor:pointer;font-size:12px}
  .app-shell:has(.mobile-battlefield)>header {position:fixed;z-index:30;top:var(--app-visual-top);left:var(--battle-safe-left);right:var(--battle-safe-right);height:calc(34px + var(--battle-safe-top));padding:var(--battle-safe-top) 8px 0;margin:0;background:#f5f3ed;flex-wrap:nowrap}
@@ -404,7 +404,7 @@
 @keyframes theater-intro{0%{opacity:0}10%,80%{opacity:1}100%{opacity:0}}
 .chronicle-theater .cinema-summary{top:50%;bottom:auto;transform:translateY(-50%);max-width:580px;left:12%;right:12%;background:#152c32ee;border:2px solid #eed38a}
 .chronicle-theater .cinema-summary span{font-size:.88rem}
-@media(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px){
+@media(max-width:600px), (max-height:800px){
  .television>.chronicle-heading{display:none}
  .mobile-battlefield.chronicle-theater{display:flex;gap:0}
  .mobile-battlefield.chronicle-theater>.battlefield-stage{height:auto!important;grid-row:auto;flex:1 1 0!important}
@@ -421,7 +421,7 @@
 }
 @media(prefers-reduced-motion:reduce){.theater-intro{animation:none}}.chronicle-theater .command-deck{grid-column:1/-1}
 .chronicle-theater .battlefield-stage:has(canvas[data-marching="true"]) .cinema-summary{visibility:hidden}
-@media(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px){
+@media(max-width:600px), (max-height:800px){
  .mobile-battlefield .theater-playback{order:4;flex:0 0 auto;padding:2px 8px}
  .mobile-battlefield .theater-playback .chronicle-controls{gap:4px;min-height:30px;margin:0;justify-content:space-between}
  .mobile-battlefield .theater-playback .chronicle-controls label{display:flex;align-items:center;gap:4px;font-size:12px}
@@ -430,7 +430,7 @@
  .mobile-battlefield .theater-playback .chronicle-slider{font-size:11px;align-items:center;gap:4px;margin:0;height:22px}
  .mobile-battlefield .theater-playback .chronicle-slider input{flex:1;min-width:0;margin:0}
 }
-@media(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px){.mobile-battlefield .theater-playback .chronicle-controls{flex-wrap:nowrap;padding:0;border:0}.mobile-battlefield .theater-playback .chronicle-controls span{width:auto;margin:0;white-space:nowrap}.mobile-battlefield .theater-playback .chronicle-controls label{flex-shrink:0}}
+@media(max-width:600px), (max-height:800px){.mobile-battlefield .theater-playback .chronicle-controls{flex-wrap:nowrap;padding:0;border:0}.mobile-battlefield .theater-playback .chronicle-controls span{width:auto;margin:0;white-space:nowrap}.mobile-battlefield .theater-playback .chronicle-controls label{flex-shrink:0}}
 
 .piece-legend > .piece-legend-entry {min-width:0;padding:8px;border:1px solid #69807c;border-radius:5px}
 .piece-legend-entry > strong {display:block;margin-bottom:5px}
@@ -473,16 +473,16 @@
 .compact-story-heading .theater-chapter{position:static;display:flex;flex-direction:row;align-items:center;gap:6px;text-shadow:none}
 .compact-story-heading .theater-chapter small{font-size:12px;white-space:nowrap;padding:2px 4px}
 .compact-story-heading .theater-chapter strong{font-size:13px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px){
+@media(max-width:600px), (max-height:800px){
  .app-shell:has(.mobile-battlefield)::before{content:'';position:fixed;top:var(--app-visual-top);left:0;right:0;height:var(--app-visual-height);z-index:9;background:#122a30}
  .mobile-primary-row>button{font-size:13px}.mobile-primary-row{flex-wrap:wrap}.mobile-primary-row>button{flex:1 1 44px}
  .mobile-battlefield .compact-story-heading .theater-chapter{position:static}
 }
-@media(max-width:1000px) and (max-height:500px) and (orientation:landscape), (min-width:1001px) and (max-height:800px){
- .mobile-battlefield,.mobile-battlefield.chronicle-theater{display:grid;grid-template-columns:minmax(0,1fr) min(40vw,280px);grid-template-rows:30px minmax(0,1fr);gap:0}
+@media(orientation:landscape) and (max-height:800px), (min-width:601px) and (max-height:800px){
+ .mobile-battlefield,.mobile-battlefield.chronicle-theater{display:grid;grid-template-columns:minmax(0,1fr) clamp(160px,34vw,240px);grid-template-rows:30px minmax(0,1fr);gap:0}
  .mobile-battlefield>.battlefield-header{grid-column:1/-1;grid-row:1}
  .mobile-battlefield>.battlefield-stage,.mobile-battlefield.chronicle-theater>.battlefield-stage{grid-column:1;grid-row:2;min-width:0;align-self:stretch;height:100%!important}
- .mobile-battlefield>.compact-story-heading{grid-column:1;grid-row:1;z-index:2;margin-left:135px;margin-right:min(40vw,280px);align-self:center;padding:0}
+ .mobile-battlefield>.compact-story-heading{grid-column:1;grid-row:1;z-index:2;margin-left:135px;margin-right:clamp(160px,34vw,240px);align-self:center;padding:0}
  .mobile-battlefield .compact-story-heading strong{display:none}
  .mobile-battlefield>.compact-controls{display:flex;flex-direction:column;grid-column:2;grid-row:2;min-height:0;overflow:auto;overscroll-behavior:contain;background:#122a30;border-left:1px solid #7c958b}
  .mobile-battlefield .battlefield-cameras{order:0;flex:0 0 auto;grid-template-columns:repeat(3,minmax(0,1fr));padding:3px;gap:3px}
@@ -501,3 +501,20 @@
 }
 
 .compact-picker section[tabindex]{scroll-margin-top:64px;outline-offset:3px}
+
+/* Keep the name and its submit action together; settings return after save/cancel. */
+.formation-library.is-editing>:not(.formation-heading):not(.formation-name-form):not(.formation-notice){display:none}
+@media(max-width:600px), (max-height:800px){
+ .mobile-details:has(.formation-name-form){inset:5px;max-height:none}
+ .mobile-details:has(.formation-name-form)>.battlefield-settings,
+ .mobile-details:has(.formation-name-form)>.battlefield-key,
+ .mobile-details:has(.formation-name-form)>.mobile-rules{display:none}
+ .mobile-details:has(.formation-name-form) .command-deck>:not(.formation-library){display:none}
+ .mobile-details:has(.formation-name-form) .command-deck{margin:2px;padding:5px}
+ .formation-library.is-editing{padding:8px}
+ .formation-library.is-editing .formation-heading{margin-bottom:4px}
+ .formation-library.is-editing .formation-name-form{margin:0;padding:6px}
+ .formation-library.is-editing .formation-name-form small{font-size:12px}
+ .compact-picker-trigger>small{display:block;font-size:10px;line-height:1.1}
+ .mobile-operation .compact-selected-name{font-size:17px;line-height:1.3;color:#fff1b8}
+}

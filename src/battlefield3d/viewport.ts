@@ -41,7 +41,7 @@ export function useVisualViewport(){
   return()=>{cancelAnimationFrame(raf);window.removeEventListener('resize',schedule);viewport?.removeEventListener('resize',schedule);viewport?.removeEventListener('scroll',schedule);root.style.removeProperty('--app-visual-height');root.style.removeProperty('--app-visual-top');};
  },[]);
 }
-export const COMPACT_SCREEN_QUERY='(max-width:600px), (max-width:1000px) and (max-height:500px), (min-width:1001px) and (max-height:800px)';
+export const COMPACT_SCREEN_QUERY='(max-width:600px), (max-height:800px)';
 export function useMobileScreen(){
  const [mobile,setMobile]=useState(()=>window.matchMedia?.(COMPACT_SCREEN_QUERY).matches??false);
  useEffect(()=>{const media=window.matchMedia?.(COMPACT_SCREEN_QUERY);if(!media)return;const update=()=>setMobile(media.matches);update();media.addEventListener?.('change',update);return()=>media.removeEventListener?.('change',update);},[]);

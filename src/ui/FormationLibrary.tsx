@@ -20,8 +20,15 @@ export function FormationLibrary({ pieces, onApply, saveRequested=0 }: { pieces:
  const [selected,setSelected]=useState(activeId),[name,setName]=useState(''),[editing,setEditing]=useState<'save'|'rename'|null>(null),[deleting,setDeleting]=useState(false);
  const [notice,setNotice]=useState({text:loaded.error,success:false});
  const [guide,setGuide]=useState(()=>{try{return localStorage.getItem(GUIDE_KEY)!=='done';}catch{return true;}});
- const nameInput=useRef<HTMLInputElement>(null);
- useEffect(()=>{if(editing)nameInput.current?.focus();},[editing]);
+ const nameInput=useRef<HTMLInputElement>(null),nameForm=useRef<HTMLFormElement>(null);
+ useEffect(()=>{
+  if(!editing)return;
+  let frame=0;
+  const reveal=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>nameForm.current?.scrollIntoView?.({block:'center',behavior:'instant'}));};
+  nameInput.current?.focus({preventScroll:true});reveal();
+  window.addEventListener('resize',reveal);window.visualViewport?.addEventListener('resize',reveal);
+  return()=>{cancelAnimationFrame(frame);window.removeEventListener('resize',reveal);window.visualViewport?.removeEventListener('resize',reveal);};
+ },[editing]);
  useEffect(()=>{if(guide){try{localStorage.setItem(GUIDE_KEY,'done');}catch{/* Optional guide. */}}},[guide]);
  useEffect(()=>{if(saveRequested){setName(`自作陣形 ${presets.length+1}`);setEditing('save');setDeleting(false);}},[saveRequested]);
  const current=presets.find(p=>p.id===selected),active=presets.find(p=>p.id===activeId);
@@ -50,12 +57,12 @@ export function FormationLibrary({ pieces, onApply, saveRequested=0 }: { pieces:
   try{const fresh=readLibrary().find(p=>p.id===selected);if(!fresh)throw Error('保存陣形が見つかりません。');onApply(materializePreset(fresh));setActiveId(fresh.id);setNotice({text:`「${fresh.name}」を適用しました。`,success:true});}
   catch{setNotice({text:'保存陣形が不正です。配置は変えていません。',success:false});}
  }
- return <section className="formation-library" aria-label="自作陣形">
+ return <section className={'formation-library'+(editing?' is-editing':'')} aria-label="自作陣形">
   <div className="formation-heading"><strong>自作陣形</strong><span>{presets.length}/{FORMATION_LIMIT}件</span></div>
   {guide&&<div className="formation-help"><p>この画面から自分の陣形を保存できます。配置を整えたら、名前を付けて保存しましょう。</p><button onClick={()=>{setGuide(false);try{localStorage.setItem(GUIDE_KEY,'done');}catch{/* Optional guide. */}}}>案内を閉じる</button></div>}
   <p className={'formation-state '+(dirty?'is-dirty':'is-saved')} role="status" aria-label="陣形の保存状態">{active?`編集中：${active.name} · ${dirty?'未保存変更あり':'保存済み'}`:'名前付き陣形は未保存'}<small>配置の自動保存とは別に、名前付きで残せます。</small></p>
   <button className="primary wide" onClick={()=>{setName(`自作陣形 ${presets.length+1}`);setEditing('save');setDeleting(false);}}>現在の配置を保存</button>
-  {editing&&<form className="formation-name-form" aria-label={editing==='save'?'陣形を新規保存':'陣形の名前変更'} onSubmit={e=>{e.preventDefault();submit();}}><label>保存名 <input ref={nameInput} aria-label="自作陣形の名前" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><small>1〜40文字。現在の配置はそのままです。</small><div className="actions"><button className="primary" type="submit">{editing==='save'?'陣形を保存':'名前を変更する'}</button><button type="button" onClick={()=>setEditing(null)}>入力を取消</button></div></form>}
+  {editing&&<form ref={nameForm} className="formation-name-form" aria-label={editing==='save'?'陣形を新規保存':'陣形の名前変更'} onSubmit={e=>{e.preventDefault();submit();}}><label>保存名 <input ref={nameInput} aria-label="自作陣形の名前" maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label><small>1〜40文字。現在の配置はそのままです。</small><div className="actions"><button className="primary" type="submit">{editing==='save'?'陣形を保存':'名前を変更する'}</button><button type="button" onClick={()=>setEditing(null)}>入力を取消</button></div></form>}
   {notice.text&&<p className={'formation-notice '+(notice.success?'is-success':'is-error')} role="status">{notice.text}</p>}
   <label className="formation-picker">保存済み陣形を選ぶ <select aria-label="保存済み陣形を選ぶ" value={selected} onChange={e=>{setSelected(e.target.value);setDeleting(false);setEditing(null);}}><option value="">選択してください</option>{[...presets].sort((a,b)=>Number(b.favorite)-Number(a.favorite)||b.updatedAt.localeCompare(a.updatedAt)||a.name.localeCompare(b.name)).map(p=><option key={p.id} value={p.id}>{p.favorite?'★ ':''}{p.name}</option>)}</select></label>
   {current&&<div className="formation-card"><Preview preset={current}/><div><strong>{current.favorite?'★ ':''}{current.name}</strong><small>更新 {new Date(current.updatedAt).toLocaleString('ja-JP')}</small><button onClick={load}>この陣形で適用</button><small>選ぶだけでは配置は変わりません。</small></div></div>}
