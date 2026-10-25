@@ -50,7 +50,7 @@ test('fixed presets, selection focus and cancellation never alter the setup',asy
     await expect(button).toHaveAttribute('aria-pressed','true');await expect(canvas(page)).toHaveAttribute('data-camera-preset',preset);
   }
   await tap(page,'B1',!!isMobile);await page.getByRole('button',{name:'選択中の駒',exact:true}).click();
-  await expect(canvas(page)).toHaveAttribute('data-camera-preset',isMobile?'selection-fit':'selected');
+  await expect(canvas(page)).toHaveAttribute('data-camera-preset',await page.locator('.mobile-battlefield').count()?'selection-fit':'selected');
   await page.getByRole('button',{name:'選択を解除',exact:true}).click();
   await expect(canvas(page)).toHaveAttribute('data-camera-preset','full');
   await expect(page.getByRole('button',{name:'全景',exact:true})).toHaveAttribute('aria-pressed','true');

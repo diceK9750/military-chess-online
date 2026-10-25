@@ -69,6 +69,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     expect((await probe()).tones).toBeGreaterThan(0);
     await page.getByRole('button', { name: '効果音 OFFにする' }).click();
     expect((await probe()).state).toBe('suspended');
+    if(await page.locator('.audio-menu>summary').isVisible())await page.locator('.audio-menu>summary').click();
     await page.screenshot({ path: info.outputPath(`ended-${width}.png`), fullPage: true });
     await page.getByRole('button', { name: '戦史再現', exact: true }).click();
     const canvas = page.getByRole('img', { name: canvasName });

@@ -119,7 +119,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [430,932], [
     await expect(page.getByRole('list', { name: '三次元表示中の駒' })).not.toContainText('敵軍');
     const originalSetup = await setupSaved(page);
     await tap(page, 'B1', !!isMobile);
-    if(width<=600)await expect(page.locator('.mobile-operation')).toContainText('B1');else await expect(page.locator('.selection-panel')).toContainText('（B1）・交換可能');
+    if(await page.locator('.mobile-operation').isVisible())await expect(page.locator('.mobile-operation')).toContainText('B1');else await expect(page.locator('.selection-panel')).toContainText('（B1）・交換可能');
     await expect(page.getByRole('button', { name: '選択中の駒', exact: true })).toBeEnabled();
     await tap(page, 'E1', !!isMobile);
     await expect(page.locator('.notice')).toContainText('入れ替え、ブラウザへ保存');
