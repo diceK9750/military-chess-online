@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SITES } from '../game/board';
 import { PIECES } from '../game/pieces';
 import { BRIDGES, sitePoint } from './state';
-import type { BattlefieldHandlers, BattlefieldViewState, CameraPreset } from './state';
+import type { BattlefieldHandlers, BattlefieldPiece, BattlefieldViewState, CameraPreset } from './state';
 import type { Site } from '../game/types';
 import { TapGesture } from './gesture';
 import { createBackend } from './backend';
@@ -14,6 +14,8 @@ import { qualityProfile } from './settings';
 import { approachingEnemies, snapTarget } from './assistance';
 import { addOfficerRegalia, officerLook } from './regalia';
 import { SELECTED_PIECE_SCALE, selectionMarker } from './selectionPresentation';
+import { IDLE_TICK_MS, frameUv, spriteFrame, spritePhase, spriteSheet, spriteUrl, travelPose, travelProfile } from './sprites';
+import { SPRITE_SHEETS, type SpriteSheetKey } from './spriteSheets';
 
 export interface BattlefieldRenderer {
   readonly backend: 'webgpu' | 'webgl2';
@@ -37,7 +39,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   controls.enableRotate = false;
   controls.enableZoom = false;
   controls.enablePan = false;
-  controls.enableDamping = false; // Event-driven frames, no idle animation loop.
+  controls.enableDamping = false; // Event-driven frames; idle sprites use a slow timer, not a frame loop.
   controls.minPolarAngle = 0;
   controls.maxPolarAngle = Math.PI / 2.6;
   controls.minDistance = 3.8;
@@ -83,6 +85,19 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   let cameraRevision = 0;
   let hasUpdated = false;
   let focusAfterDrag = false;
+  // Character sprites: one atlas per public type plus one shared neutral sheet for unrevealed enemies.
+  const SPRITE_SIZE = 1.08, SPRITE_BASE = .2, SPRITE_LABEL_SCALE = .8;
+  type Actor = { mesh: THREE.Mesh; sheet: SpriteSheetKey; phase: number; index: number; plaque?: THREE.Object3D };
+  const actors: Actor[] = [];
+  const sheetMaterials = new Map<SpriteSheetKey, THREE.MeshBasicMaterial>();
+  const loadedSheets = new Set<SpriteSheetKey>();
+  const frameGeometries = new Map<string, THREE.PlaneGeometry>();
+  const textureLoader = new THREE.TextureLoader();
+  const idleStart = performance.now();
+  let idleTimer = 0;
+  let spritesEnabled = true;
+  let rebuild: (() => void) | undefined;
+  const actorEuler = new THREE.Euler(0, 0, 0, 'YXZ'), actorUp = new THREE.Vector3(), viewOffset = new THREE.Vector3();
   function geometry<T extends THREE.BufferGeometry>(value: T): T { geometries.add(value); return value; }
   function material(color: string) {
     // A compact stylized PBR palette gives enamel, cloth and metal different light response
@@ -108,6 +123,55 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const texture = new THREE.CanvasTexture(bitmap); texture.colorSpace = THREE.SRGBColorSpace; textures.add(texture);
     const surface = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, depthTest: false }); materials.add(surface); labelCache.set(key, surface); return surface;
   }
+  function frameGeometry(sheet: SpriteSheetKey, index: number) {
+    const id = `${sheet}/${index}`, cached = frameGeometries.get(id); if (cached) return cached;
+    const [u0, v0, u1, v1] = frameUv(sheet, index), foot = SPRITE_SHEETS[sheet].foot;
+    // Anchored at the pedestal's bottom edge so every frame of a type stands on the same spot.
+    const plane = geometry(new THREE.PlaneGeometry(SPRITE_SIZE, SPRITE_SIZE)); plane.translate(0, SPRITE_SIZE * (foot - .5), 0);
+    const uv = plane.getAttribute('uv') as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0);
+    uv.needsUpdate = true; frameGeometries.set(id, plane); return plane;
+  }
+  function sheetMaterial(sheet: SpriteSheetKey) {
+    const cached = sheetMaterials.get(sheet); if (cached) return cached;
+    const texture = textureLoader.load(spriteUrl(sheet), () => { loadedSheets.add(sheet); requestDraw(); scheduleIdle(); }, undefined, () => {
+      // Missing art falls back to the original 3D pieces rather than empty pedestals.
+      if (disposed || !spritesEnabled) return; spritesEnabled = false; rebuild?.();
+    });
+    texture.colorSpace = THREE.SRGBColorSpace; texture.generateMipmaps = true; texture.anisotropy = 4; textures.add(texture);
+    const surface = new THREE.MeshBasicMaterial({ map: texture, transparent: true, alphaTest: .08, side: THREE.DoubleSide });
+    materials.add(surface); sheetMaterials.set(sheet, surface); return surface;
+  }
+  function idleAllowed() { return !disposed && !reducedMotion.matches && !document.hidden && actors.some(actor => loadedSheets.has(actor.sheet)); }
+  function tickIdle() {
+    const elapsed = performance.now() - idleStart; let changed = false;
+    for (const actor of actors) {
+      if (!loadedSheets.has(actor.sheet)) continue;
+      const index = spriteFrame(actor.sheet, elapsed + actor.phase);
+      if (index !== actor.index) { actor.index = index; actor.mesh.geometry = frameGeometry(actor.sheet, index); changed = true; }
+    }
+    if (changed) requestDraw();
+  }
+  function scheduleIdle() {
+    if (idleTimer || !idleAllowed()) return;
+    idleTimer = window.setTimeout(() => { idleTimer = 0; if (!idleAllowed()) return; tickIdle(); scheduleIdle(); }, IDLE_TICK_MS);
+  }
+  function visibility() { if (document.hidden) { clearTimeout(idleTimer); idleTimer = 0; } else { tickIdle(); scheduleIdle(); } }
+  function orientActors() {
+    if (!actors.length) return;
+    viewOffset.copy(camera.position).sub(controls.target);
+    const yaw = Math.atan2(viewOffset.x, viewOffset.z), pitch = Math.atan2(viewOffset.y, Math.hypot(viewOffset.x, viewOffset.z));
+    // Lean the card back part of the way toward the camera: readable from above, still standing on its cell.
+    const tilt = -Math.max(0, pitch) * .55;
+    for (const actor of actors) {
+      actorEuler.set(tilt, yaw, actor.mesh.userData.lean ?? 0); actor.mesh.quaternion.setFromEuler(actorEuler);
+      if (actor.plaque) {
+        const top = SPRITE_SIZE * (SPRITE_SHEETS[actor.sheet].foot - SPRITE_SHEETS[actor.sheet].top);
+        actorUp.set(0, 1, 0).applyQuaternion(actor.mesh.quaternion).multiplyScalar(top + .1);
+        actor.plaque.position.copy(actor.mesh.position).add(actorUp);
+      }
+    }
+  }
   const ghostShape=geometry(new THREE.ConeGeometry(.3,.65,5));
   const ghostSurface=new THREE.MeshBasicMaterial({color:'#a9f1ef',transparent:true,opacity:.55});materials.add(ghostSurface);
   function requestDraw() {
@@ -119,7 +183,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const moving = animateFrame?.(now) ?? false;
         const effects = effectsFrame?.(now) ?? false;
         const active = moving || effects;
-        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar((label.userData.privacyStable ? 1 : Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12))) * (label.userData.focusScale ?? 1));});
+        orientActors();
+        billboards.forEach(label => {label.quaternion.copy(camera.quaternion);label.getWorldPosition(labelPosition);label.scale.setScalar((label.userData.privacyStable ? 1 : Math.min(1.35,Math.max(.85,labelPosition.distanceTo(camera.position)/12))) * (label.userData.focusScale ?? 1) * (label.userData.labelScale ?? 1));});
         canvas.dataset.cameraPose = camera.position.toArray().join('/') + '/' + controls.target.toArray().join('/');
         renderer.render(scene, camera);
         if (!moving) animateFrame=undefined;
@@ -184,11 +249,17 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     raycaster.setFromCamera(new THREE.Vector2((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1), camera);
     const floor=raycaster.intersectObjects(pickables,true)[0];
     if(ground)return floor;
-    const hit=raycaster.intersectObjects([...units.children,...overlays.children,...pickables],true).find(value=>value.object.userData.site||value.object.userData.lane);
+    const hit=raycaster.intersectObjects([...units.children,...overlays.children,...pickables],true).find(value=>(value.object.userData.site||value.object.userData.lane)&&figureHit(value));
     if(hit?.object.userData.lane)return hit;
     // Upright labels can project over a farther cell. A legal floor target wins over that label.
     if(floor&&state.interaction.selectedSite&&state.interaction.legalTargets.includes(floor.object.userData.site as Site))return floor;
     return hit;
+  }
+  /** A character card only counts where its figure is drawn, so taps reach the cell behind it. */
+  function figureHit(value: THREE.Intersection) {
+    const sheet = value.object.userData.actorSheet as SpriteSheetKey | undefined; if (!sheet) return true;
+    const meta = SPRITE_SHEETS[sheet], local = value.object.worldToLocal(value.point.clone());
+    return Math.abs(local.x) <= Math.min(.36, meta.half) * SPRITE_SIZE && local.y >= 0 && local.y <= (meta.foot - meta.top) * SPRITE_SIZE;
   }
   function cancelDrag() {
     pieceDrag = null; dragGhost.clear(); dragLabel.clear();
@@ -274,6 +345,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
   function dispose() {
     if (disposed) return; disposed = true;
     cancelAnimationFrame(frame); cancelAnimationFrame(resizeFrame); observer?.disconnect();
+    clearTimeout(idleTimer); idleTimer = 0; document.removeEventListener('visibilitychange', visibility); actors.length = 0;
     canvas.removeEventListener('webglcontextlost', lost);
     canvas.removeEventListener('pointerdown', down, true); canvas.removeEventListener('pointermove', movePointer);
     canvas.removeEventListener('pointerup', up, true); canvas.removeEventListener('pointercancel', cancelPointer, true);
@@ -343,6 +415,15 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     const rankPip = geometry(new THREE.IcosahedronGeometry(.075,0));
     const regaliaShapes={box:geometry(new THREE.BoxGeometry(1,1,1)),cylinder:geometry(new THREE.CylinderGeometry(.5,.5,1,6)),cone:geometry(new THREE.ConeGeometry(.5,1,6))};
     const curtain = geometry(new THREE.BoxGeometry(1.85, 0.5, 0.04));
+    const ownerRing = geometry(new THREE.TorusGeometry(.4, .03, 4, 28));
+    const ownTrim = material('#5fb3e0'), enemyTrim = material('#d36a52');
+    function addActor(piece: BattlefieldPiece, x: number, z: number, group: THREE.Object3D) {
+      const sheet = spriteSheet(piece), phase = spritePhase(piece, state.viewer);
+      const index = !reducedMotion.matches && loadedSheets.has(sheet) ? spriteFrame(sheet, performance.now() - idleStart + phase) : 0;
+      const sprite = mesh(frameGeometry(sheet, index), sheetMaterial(sheet), x, SPRITE_BASE, z, group);
+      sprite.userData = { site: piece.position, actorSheet: sheet }; sprite.renderOrder = 2;
+      const actor: Actor = { mesh: sprite, sheet, phase, index }; actors.push(actor); return actor;
+    }
     for (const owner of [1, 2] as const) {
       const z = owner === 1 ? 4.1 : -4.1, surface = owner === state.viewer ? blue : red;
       const banner = mesh(curtain, surface, 0, 0.38, z);
@@ -392,7 +473,7 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       const transition = next.moveCount === previous.moveCount + 1 && next.lastMove ? next.lastMove : null;
       const movingPiece = transition ? previous.pieces.find(piece => piece.position === transition.from) : undefined;
       animateFrame = undefined;hover.clear();hovered=null;delete canvas.dataset.hoverSite;
-      state = next; units.clear(); overlays.clear(); billboards.length = 0;
+      state = next; units.clear(); overlays.clear(); billboards.length = 0; actors.length = 0;
       winningLight.intensity=next.freshVictory?16:0;
       if(next.freshVictory&&next.lastMove){const p=sitePoint(next.lastMove.to);winningLight.position.set(p.x,7,p.z+2);winningLight.target.position.set(p.x,.2,p.z);}else delete canvas.dataset.ceremony;
       canvas.dataset.overlay=String(!!state.overlay);
@@ -429,56 +510,63 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
           const object = mesh(shape, surface, x + dx, .2 + (y-.2)*stature, z + dz, group);
           object.userData = { site: piece.position }; return object;
         };
-        if (piece.unknown || !['mine','aircraft','tank','flag'].includes(piece.type)) {
-          part(body, uniform, 0, .4);
-          part(headShape, skin, 0, .63);
-          part(helmet, uniform, 0, .74);
-          for (const side of [-1, 1]) {
-            part(limb, dark, side * .09, .23);
-            const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
+        let actor: Actor | undefined;
+        if (spritesEnabled) {
+          // Own blue / enemy red trim keeps sides readable; unrevealed enemies all share one sprite.
+          const trim = mesh(ownerRing, own ? ownTrim : enemyTrim, x, .245, z, group); trim.rotation.x = -Math.PI / 2; trim.userData = { site: piece.position };
+          actor = addActor(piece, x, z, group);
+        } else {
+          if (piece.unknown || !['mine','aircraft','tank','flag'].includes(piece.type)) {
+            part(body, uniform, 0, .4);
+            part(headShape, skin, 0, .63);
+            part(helmet, uniform, 0, .74);
+            for (const side of [-1, 1]) {
+              part(limb, dark, side * .09, .23);
+              const arm = part(limb, uniform, side * .21, .42); arm.rotation.z = side * .2;
+            }
           }
-        }
-        // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
-        if (!piece.unknown) {
-          if (style.rank) {
-            const family = Math.ceil(style.rank / 3), tier = (style.rank - 1) % 3 + 1;
-            const accent = family === 3 ? brass : family === 2 ? silver : pale;
-            part(rankBases[family-1],accent,0,.24);
-            // Large, non-text insignia repeat the 3/2/1 tier on the base and helmet.
-            for(let i=0;i<tier;i++) part(rankPip,accent,(i-(tier-1)/2)*.18,.3,.3);
-            const colors={gold:brass,silver,pale,uniform,dark};
-            addOfficerRegalia(style.rank,(shape,color,dx,y,dz,sx,sy,sz,rz=0)=>{const o=part(regaliaShapes[shape],colors[color],dx,y,dz);o.scale.set(sx,sy*stature,sz);o.rotation.z=rz;});
-          } else if (piece.type === 'aircraft') {
-            part(fuselage, silver, 0, .56).rotation.x=Math.PI/2;
-            part(equipment,silver,0,.6).scale.set(2.65,1,2.3);
-            part(headShape,uniform,0,.67).scale.set(.8,.65,1.2);
-            part(equipment,brass,0,.78,-.23).scale.set(.8,2,1);
-            part(propeller,dark,0,.61,.27);
-            part(equipment,uniform,0,.56,-.28).scale.set(1.7,.6,1.3);
-          } else if (piece.type === 'tank') {
-            part(armor, olive, 0, .35).scale.set(1.5,1,2);
-            for(const side of [-1,1]) part(track,dark,side*.28,.27);
-            part(helmet,olive,0,.62).scale.set(1.3,1.5,1.3);
-            const barrel=part(tool,brass,0,.61,.25);barrel.rotation.x=Math.PI/2;barrel.scale.y=1.3;
-          } else if (piece.type === 'engineer') {
-            part(helmet,amber,0,.77).scale.set(1.5,1.8,1.5);
-            part(armor,wood,0,.39,-.16).scale.set(.9,.9,.65);
-            part(tool,silver,.27,.46).rotation.z=-.35;part(equipment,silver,.33,.67).scale.set(.9,1.6,1);
-            part(tool,wood,-.27,.45).rotation.z=.3;part(shovel,silver,-.33,.25);
-          } else if (piece.type === 'cavalry') {
-            part(horse,wood,0,.38).scale.set(1.2,1.2,1.3);
-            for(const dx of [-.14,.14])for(const dz of [-.2,.2])part(limb,dark,dx,.2,dz).scale.y=1.5;
-            part(cloak,wood,0,.59,.23).scale.set(.55,1.1,.75);part(headShape,wood,0,.79,.25).scale.set(.85,1,1.5);
-            part(tool,brass,-.28,.66).scale.y=1.7;
-          } else if (piece.type === 'spy') {
-            part(cloak,violet,0,.4).scale.set(1.6,2,1.3);part(cloak,dark,0,.77).scale.set(1.1,1.2,1.1);
-            part(insignia,silver,0,.64,.14).scale.x=2.1;
-          } else if (piece.type === 'flag') {
-            part(pole,wood,-.2,.67).scale.y=1.3;
-            part(flagCloth,brass,.02,.94).scale.set(1.4,1.15,1);part(insignia,uniform,.02,.94,.03).scale.set(3,3,1);
-          } else if (piece.type === 'mine') {
-            // A device silhouette, rather than another standing infantryman.
-            part(mineDevice,dark,0,.31);for(let i=0;i<6;i++){const angle=i/6*Math.PI*2;part(insignia,amber,Math.cos(angle)*.22,.36,Math.sin(angle)*.22).scale.y=2;}
+          // Only the allowlisted visible type can affect geometry. Unknown enemies share every part.
+          if (!piece.unknown) {
+            if (style.rank) {
+              const family = Math.ceil(style.rank / 3), tier = (style.rank - 1) % 3 + 1;
+              const accent = family === 3 ? brass : family === 2 ? silver : pale;
+              part(rankBases[family-1],accent,0,.24);
+              // Large, non-text insignia repeat the 3/2/1 tier on the base and helmet.
+              for(let i=0;i<tier;i++) part(rankPip,accent,(i-(tier-1)/2)*.18,.3,.3);
+              const colors={gold:brass,silver,pale,uniform,dark};
+              addOfficerRegalia(style.rank,(shape,color,dx,y,dz,sx,sy,sz,rz=0)=>{const o=part(regaliaShapes[shape],colors[color],dx,y,dz);o.scale.set(sx,sy*stature,sz);o.rotation.z=rz;});
+            } else if (piece.type === 'aircraft') {
+              part(fuselage, silver, 0, .56).rotation.x=Math.PI/2;
+              part(equipment,silver,0,.6).scale.set(2.65,1,2.3);
+              part(headShape,uniform,0,.67).scale.set(.8,.65,1.2);
+              part(equipment,brass,0,.78,-.23).scale.set(.8,2,1);
+              part(propeller,dark,0,.61,.27);
+              part(equipment,uniform,0,.56,-.28).scale.set(1.7,.6,1.3);
+            } else if (piece.type === 'tank') {
+              part(armor, olive, 0, .35).scale.set(1.5,1,2);
+              for(const side of [-1,1]) part(track,dark,side*.28,.27);
+              part(helmet,olive,0,.62).scale.set(1.3,1.5,1.3);
+              const barrel=part(tool,brass,0,.61,.25);barrel.rotation.x=Math.PI/2;barrel.scale.y=1.3;
+            } else if (piece.type === 'engineer') {
+              part(helmet,amber,0,.77).scale.set(1.5,1.8,1.5);
+              part(armor,wood,0,.39,-.16).scale.set(.9,.9,.65);
+              part(tool,silver,.27,.46).rotation.z=-.35;part(equipment,silver,.33,.67).scale.set(.9,1.6,1);
+              part(tool,wood,-.27,.45).rotation.z=.3;part(shovel,silver,-.33,.25);
+            } else if (piece.type === 'cavalry') {
+              part(horse,wood,0,.38).scale.set(1.2,1.2,1.3);
+              for(const dx of [-.14,.14])for(const dz of [-.2,.2])part(limb,dark,dx,.2,dz).scale.y=1.5;
+              part(cloak,wood,0,.59,.23).scale.set(.55,1.1,.75);part(headShape,wood,0,.79,.25).scale.set(.85,1,1.5);
+              part(tool,brass,-.28,.66).scale.y=1.7;
+            } else if (piece.type === 'spy') {
+              part(cloak,violet,0,.4).scale.set(1.6,2,1.3);part(cloak,dark,0,.77).scale.set(1.1,1.2,1.1);
+              part(insignia,silver,0,.64,.14).scale.x=2.1;
+            } else if (piece.type === 'flag') {
+              part(pole,wood,-.2,.67).scale.y=1.3;
+              part(flagCloth,brass,.02,.94).scale.set(1.4,1.15,1);part(insignia,uniform,.02,.94,.03).scale.set(3,3,1);
+            } else if (piece.type === 'mine') {
+              // A device silhouette, rather than another standing infantryman.
+              part(mineDevice,dark,0,.31);for(let i=0;i<6;i++){const angle=i/6*Math.PI*2;part(insignia,amber,Math.cos(angle)*.22,.36,Math.sin(angle)*.22).scale.y=2;}
+            }
           }
         }
         const text = piece.unknown ? piece.position.startsWith('HQ') ? '敵駒' : '?' : PIECES[piece.type].label;
@@ -486,22 +574,31 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
         const plaque = mesh(face, label(text, own ? '#173547' : '#fff3df', own ? '#fff7dc' : '#743e36', true), x, Math.max(1.14,1.2*stature), z, group);
         plaque.renderOrder=5;
         plaque.userData = { site: piece.position, ...(selectedPiece ? {focusScale:1.12} : {}), ...(piece.unknown ? {privacyStable:true} : {}) }; billboards.push(plaque);
+        if (actor) { actor.plaque = plaque; plaque.userData.labelScale = SPRITE_LABEL_SCALE; }
       }
       units.add(moving);
       if (transition && movingPiece && !reducedMotion.matches) {
-        const profile=motionProfile(movingPiece);
+        const profile=travelProfile(motionProfile(movingPiece));
         const from = sitePoint(transition.from), to = sitePoint(transition.to);
         const ghost = !moving.children.length;
         if (ghost) {
           // An eliminated attacker uses only the previously visible representation.
           mesh(badge, movingPiece.owner === state.viewer ? blue : red, to.x, 0.16, to.z, moving);
+          if (spritesEnabled) addActor(movingPiece, to.x, to.z, moving);
         }
+        const travellers = actors.filter(actor => actor.mesh.parent === moving);
+        // Lean into the on-screen direction of travel.
+        const screenRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const side = Math.sign(screenRight.x * (to.x - from.x) + screenRight.z * (to.z - from.z)) || 1;
         const start = performance.now();
         animateFrame = now => {
           const progress = Math.min(1, (now - start) / (next.freshVictory ? 1200 : profile.duration * (next.phase === 'replay' ? 1.5 : 1)));
-          const travel=profile.easing==='rush'?1-Math.pow(1-progress,2):profile.easing==='heavy'?progress*progress*(3-2*progress):progress;
-          moving.position.set((from.x - to.x) * (1 - travel), Math.sin(progress * Math.PI) * profile.height, (from.z - to.z) * (1 - travel));
-          if (progress === 1 && ghost) moving.clear();
+          const pose = travelPose(profile, progress);
+          moving.position.set((from.x - to.x) * (1 - pose.travel), pose.hop, (from.z - to.z) * (1 - pose.travel));
+          for (const actor of travellers) { actor.mesh.userData.lean = -side * pose.lean; actor.mesh.scale.set(1 + pose.squash * .6, 1 - pose.squash, 1); }
+          if (progress === 1 && ghost) { moving.clear(); for (const actor of travellers) actors.splice(actors.indexOf(actor), 1); }
+          canvas.dataset.moveProgress = progress.toFixed(2);
+          if (progress === 1) delete canvas.dataset.moveProgress;
           return progress < 1;
         };
         animateFrame(start);
@@ -615,7 +712,8 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
       } else {
         delete canvas.dataset.lastMove;
       }
-      requestDraw();
+      canvas.dataset.sprites = spritesEnabled ? 'anime-board-v1' : 'off';
+      requestDraw(); scheduleIdle();
     }
     canvas.setAttribute('aria-label', '操作可能な三次元戦場'); canvas.setAttribute('role', 'img');
     host.append(canvas); canvas.addEventListener('webglcontextlost', lost);
@@ -624,10 +722,12 @@ export async function createBattlefield(host: HTMLElement, initial: BattlefieldV
     canvas.addEventListener('pointerleave',leavePointer);
     canvas.style.touchAction = 'none'; // Own-piece touch drag stays captured; blank-area touch scrolls the page.
     controls.addEventListener('change', requestDraw);
+    document.addEventListener('visibilitychange', visibility);
     // Do not mutate canvas dimensions inside a ResizeObserver delivery cycle.
     observer = new ResizeObserver(() => {
       if (!disposed && !resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
     }); observer.observe(host);
+    rebuild = () => update(state);
     update(initial); resize();
     return { backend: backend.kind, update, reset, setCamera:preset=>setCamera(preset,true), dispose,
       capture:async()=>{if(disposed)throw new Error('戦場は閉じられています');if(backend.kind==='webgpu'&&renderer.renderAsync)await renderer.renderAsync(scene,camera);else renderer.render(scene,camera);const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;const context=copy.getContext('2d');if(!context)throw new Error('画像を作成できません');context.drawImage(canvas,0,0);return copy;} };

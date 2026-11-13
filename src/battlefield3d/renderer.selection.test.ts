@@ -65,8 +65,12 @@ test('unrevealed enemy pieces have identical visible geometry, dimensions, mater
   renderer=await createBattlefield(host(),initial,vi.fn(),{onSiteSelect:vi.fn(),onLaneSelect:vi.fn()});draw();
   const scene=backend.render.mock.calls.at(-1)![0] as Object3D;scene.updateMatrixWorld(true);
   const model=(site:string)=>{let found:Mesh|undefined;scene.traverse(o=>{if(!found&&o instanceof Mesh&&o.geometry.type==='ExtrudeGeometry'&&o.userData.site===site)found=o;});expect(found).toBeDefined();return found!.parent!;};
-  const signature=(root:Object3D,site:Site)=>{const bounds=new Box3().setFromObject(root),size=new Vector3();bounds.getSize(size);const origin=sitePoint(site),parts:unknown[]=[];root.traverse(o=>{if(!(o instanceof Mesh))return;const surfaces=Array.isArray(o.material)?o.material:[o.material];expect(o.castShadow).toBe(false);expect(o.receiveShadow).toBe(false);parts.push([o.geometry.type,[o.position.x-origin.x,o.position.y,o.position.z-origin.z],o.rotation.toArray(),o.scale.toArray(),surfaces.map(m=>{const color=(m as {color?:{getHex?:()=>number}}).color;return color?.getHex?.()??null;})]);});return {size:size.toArray(),parts};};
+  const signature=(root:Object3D,site:Site)=>{const bounds=new Box3().setFromObject(root),size=new Vector3();bounds.getSize(size);const origin=sitePoint(site),parts:unknown[]=[];root.traverse(o=>{if(!(o instanceof Mesh))return;const surfaces=Array.isArray(o.material)?o.material:[o.material];expect(o.castShadow).toBe(false);expect(o.receiveShadow).toBe(false);parts.push([o.geometry.type,[o.position.x-origin.x,o.position.y,o.position.z-origin.z].map(v=>+v.toFixed(9)),o.rotation.toArray(),o.scale.toArray(),surfaces.map(m=>{const color=(m as {color?:{getHex?:()=>number}}).color;return color?.getHex?.()??null;})]);});return {size:size.toArray().map(v=>+v.toFixed(9)),parts};};
   expect(signature(model('A3'),'A3')).toEqual(signature(model('F6'),'F6'));
+  // Character sprites: both hidden pieces draw the same shared neutral sheet and the same frame.
+  const sprite=(site:string)=>{let found:Mesh|undefined;model(site).traverse(o=>{if(o instanceof Mesh&&o.geometry.type==='PlaneGeometry'&&(o.material as {map?:unknown}).map)found=o;});expect(found).toBeDefined();return found!;};
+  expect(sprite('A3').material).toBe(sprite('F6').material);expect(sprite('A3').geometry).toBe(sprite('F6').geometry);
+  expect(((sprite('A3').material as unknown as {map:{image?:unknown}}).map as {userData?:unknown})).toBeDefined();
 });
 
 test('manual overview survives pending confirmation and clearing/turn change restores overview', async () => {
