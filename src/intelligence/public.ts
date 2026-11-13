@@ -21,6 +21,7 @@ export function recommendations(view: TacticalView): MoveEvaluation[] {
 export const scoreLabels: Record<ScoreTerm['key'], string> = {
   captureHQ: '本陣占領', approachEnemyHQ: '敵本陣へ接近', defendOwnHQ: '自軍本陣を防御', visibleCombat: '戦闘機会',
   capturerCombatRisk: '占領戦力のリスク', aircraftMobility: '飛行機機動性', engineerUtility: '工兵有用性', spyUtility: 'スパイ有用性', repeatMove: '往復手を抑制', avoidFiftyMoveDraw: '50手引き分け回避',
+  hqAssault: '占領済み本陣への突入リスク', hqRepelled: '本陣で撃退された記録', repelledTarget: '撃退された相手への再攻撃',
 };
 const distance = (a: Site, b: Site) => Math.min(...anchors(a).flatMap(x => anchors(b).map(y => Math.abs(x.x-y.x)+Math.abs(x.y-y.y))));
 /** Private equipment/capture bonuses and the CPU's private total never cross this public boundary. */

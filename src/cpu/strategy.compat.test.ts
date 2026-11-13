@@ -64,13 +64,26 @@ import { chooseCpuMove, evaluateMove } from './strategy';
 import { defaultPlacement } from '../dev/fixtures';
 import { startGame, applyMove } from '../game/game';
 import { observeForCpu } from './observation';
-test('fixed-seed CPU choice and exact scores match the frozen Step12B implementation across complete play', () => {
+// Step12B kept CPU_WEIGHTS.captureHQ for any capturer entering the enemy HQ. The current evaluator
+// replaces only that HQ judgement (and adds public-loss memory), so these keys are compared separately.
+const REPLACED_KEYS = new Set(['captureHQ', 'hqAssault', 'hqRepelled', 'repelledTarget']);
+test('frozen Step12B: every shared scoring term still matches exactly; only the HQ/repel judgement differs', () => {
  for(let run=0;run<8;run++) {
   let game=startGame(defaultPlacement(1),defaultPlacement(2),run%2===0?1:2);
   for(let turn=0;turn<80&&!game.result;turn++) {
    const view=observeForCpu(game,game.turn!);
-   for(const move of view.legalMoves) {const evaluation=evaluateMove(view,move); expect(evaluation.total).toBe(scoreMove(view,move)); expect(evaluation.terms.reduce((s,t)=>s+t.value,0)).toBe(evaluation.total);}
-   for(const difficulty of ['easy','normal'] as const) for(const seed of [0,1,9750,0xffffffff]) expect(chooseCpuMove(view,difficulty,seed)).toEqual(legacyChoose(view,difficulty,seed));
+   const enemyHQ=view.side===1?'HQ-P2':'HQ-P1';
+   for(const move of view.legalMoves) {
+    const evaluation=evaluateMove(view,move);
+    expect(evaluation.terms.reduce((s,t)=>s+t.value,0)).toBe(evaluation.total);
+    const actor=view.pieces.find(p=>p.known&&p.position===move.from);
+    const legacyHQ=actor?.known&&PIECES[actor.type].captures&&move.to===enemyHQ?CPU_WEIGHTS.captureHQ:0;
+    const shared=evaluation.terms.filter(t=>!REPLACED_KEYS.has(t.key)).reduce((s,t)=>s+t.value,0);
+    expect(shared).toBeCloseTo(scoreMove(view,move)-legacyHQ,9);
+    if(!evaluation.terms.some(t=>REPLACED_KEYS.has(t.key))&&legacyHQ===0) expect(evaluation.total).toBe(scoreMove(view,move));
+   }
+   // Easy is untouched. Normal now varies among near-equal moves, which is covered in strategy.test.ts.
+   for(const seed of [0,1,9750,0xffffffff]) expect(chooseCpuMove(view,'easy',seed)).toEqual(legacyChoose(view,'easy',seed));
    game=applyMove(game,legacyChoose(view,'normal',(run*123+turn)>>>0)!);
   }
  }
