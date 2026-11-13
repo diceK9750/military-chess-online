@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>軍人将棋・全16駒種の待機アニメーション比較 v4</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}
+body{margin:0;background:#111e27;color:#f8f3e5}main{max-width:1150px;margin:auto;padding:24px 16px 40px}
+h1{font-size:clamp(1.3rem,5vw,2rem);margin:0 0 8px}p{line-height:1.65}.intro{color:#e2ddcf}
+.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0 18px}
+button{min-height:44px;padding:8px 16px;border-radius:8px;border:1px solid #e4c777;background:#f1d17d;color:#172e34;font-weight:700;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+figure{margin:0;border:1px solid #776b4c;border-radius:12px;background:linear-gradient(#263a3b,#152b32);overflow:hidden}
+figure img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:contain}figcaption{padding:8px 10px 12px}
+figcaption strong{display:block;text-align:center}figcaption span{display:block;color:#d5cfbc;font-size:.78rem;line-height:1.5;margin-top:4px}
+.note{color:#d5d4c7;font-size:.9rem}@media(max-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}figcaption{padding:6px 8px 10px}}
+</style>
+</head>
+<body><main>
+<h1>軍人将棋・全16駒種の待機アニメーション v4</h1>
+<p class="intro">v3を土台に、既存コマの顔と制服を固定したまま中間動作を足した試作です。大将のうなずきは承認画像のままです。旧版（v1〜v3）はこの公開ページには含めていません。</p>
+<div class="controls"><button id="toggle" type="button">一時停止</button><span id="status" role="status">読み込み中</span></div>
+<div class="grid" id="gallery"></div>
+<p class="note">大佐は抜刀途中のコマを追加し、中尉は同じ顔のまま左右を向き、工兵はレンチを回すコマを追加しています。抜刀から掲刀への腕の上げ、中尉の首の付け根、工兵の工具と手の隙間には、まだ不自然さが残ります。ゲーム本体には組み込んでいません。</p>
+</main>
+<script>
+const pieces=[
+ ['general','大将','承認画像を使い、静かにうなずく（nod-v2を維持）'],
+ ['lieutenant-general','中将','右手と視線を同じ方向へ向けて合図（中間姿勢を通って戻る）'],
+ ['major-general','少将','手を下向きにして前進を合図'],
+ ['colonel','大佐','柄に手をかけ、抜刀の途中を経て軍刀を掲げる'],
+ ['lieutenant-colonel','中佐','周囲を警戒し、部隊に方向を示す'],
+ ['major','少佐','視線と同じ方向を指して合図'],
+ ['captain','大尉','軍刀を構えて兵を率いる'],
+ ['lieutenant','中尉','正面・左・正面・右の順に警戒（顔と帽子を固定）'],
+ ['second-lieutenant','少尉','周囲を警戒して前方を見据える'],
+ ['aircraft','飛行機','機体を保ち、プロペラを回す'],
+ ['tank','タンク','車体を保ち、砲塔で前方を警戒する'],
+ ['engineer','工兵','レンチを金具に近づけ、回して締める'],
+ ['cavalry','騎兵','馬が首を動かし、騎手が構える'],
+ ['spy','スパイ','身を低くして周囲を警戒する'],
+ ['mine','地雷','その場に固定し、表面に光が走る'],
+ ['flag','軍旗','旗竿は固定し、布が風にはためく']
+];
+const durationsMap={"lieutenant-general": [900, 700, 1100, 700], "major-general": [1100, 500, 1100, 500], "colonel": [900, 800, 550, 900, 1100, 800], "lieutenant-colonel": [1100, 500, 1100, 500], "major": [1100, 500, 1100, 500], "captain": [1100, 500, 1100, 500], "lieutenant": [1100, 1300, 1100, 1300], "second-lieutenant": [1100, 500, 1100, 500], "aircraft": [1100, 500, 1100, 500], "tank": [1100, 500, 1100, 500], "engineer": [900, 800, 900, 800, 700, 1000], "cavalry": [1100, 500, 1100, 500], "spy": [1100, 500, 1100, 500], "mine": [1100, 500, 1100, 500], "flag": [1100, 500, 1100, 500]};
+const orders={"lieutenant-general": [1, 2, 3, 2], "lieutenant": [1, 2, 1, 3], "colonel": [1, 2, 5, 4, 3, 4], "engineer": [1, 2, 3, 5, 3, 4]};
+const frameCounts={"lieutenant-general": 4, "major-general": 4, "colonel": 5, "lieutenant-colonel": 4, "major": 4, "captain": 4, "lieutenant": 4, "second-lieutenant": 4, "aircraft": 4, "tank": 4, "engineer": 5, "cavalry": 4, "spy": 4, "mine": 4, "flag": 4};
+const grid=document.querySelector('#gallery'),button=document.querySelector('#toggle'),status=document.querySelector('#status');
+const generalStill='frames/general/01.png',generalGif='gifs/general.gif';
+const imgs=new Map();
+for(const [id,name,description] of pieces){
+ const figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption'),strong=document.createElement('strong'),span=document.createElement('span');
+ img.src=id==='general'?generalStill:`frames/${id}/01.png`;img.alt=`${name}の待機アニメーション`;strong.textContent=name;span.textContent=description;caption.append(strong,span);figure.append(img,caption);grid.append(figure);imgs.set(id,img);
+}
+let playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,loaded=false,last=0,elapsed={};
+for(const [id] of pieces) if(id!=='general') elapsed[id]=0;
+function indexAt(id,time){const durations=durationsMap[id];const period=durations.reduce((a,b)=>a+b,0);let x=time%period;for(let i=0;i<durations.length;i++){if(x<durations[i])return i+1;x-=durations[i]}return 1}
+let lastFrame={};
+function show(){
+ for(const [id] of pieces){
+  if(id==='general') continue;
+  const frame=indexAt(id,elapsed[id]);
+  if(frame!==lastFrame[id]){
+    const selected=(orders[id]||[1,2,3,4])[frame-1];
+    imgs.get(id).src=`frames/${id}/${String(selected).padStart(2,'0')}.png`;
+    lastFrame[id]=frame;
+  }
+ }
+}
+function state(){button.textContent=playing?'一時停止':'再生';status.textContent=loaded?(playing?'再生中':'停止中'):'読み込み中'}
+button.addEventListener('click',()=>{playing=!playing;last=0;imgs.get('general').src=playing?generalGif:generalStill;state()});
+async function prepare(){
+ const sources=pieces.flatMap(([id])=>id==='general'?[generalStill]:Array.from({length:frameCounts[id]||4},(_,i)=>`frames/${id}/${String(i+1).padStart(2,'0')}.png`));
+ try{await Promise.all(sources.map(src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=resolve;img.onerror=reject;img.src=src})));loaded=true;show();if(playing)imgs.get('general').src=generalGif;state();requestAnimationFrame(tick)}
+ catch{status.textContent='画像を読み込めませんでした';button.disabled=true}
+}
+function tick(now){if(playing&&last){const dt=Math.min(now-last,100);for(const [id] of pieces) if(id!=='general') elapsed[id]+=dt;show()}last=now;requestAnimationFrame(tick)}
+state();prepare();
+</script>
+</html>

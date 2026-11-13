@@ -32,6 +32,11 @@ jobs:
         run: npm ci
       - name: Build static site
         run: npm run build
+      - name: Copy idle preview into dist
+        run: |
+          mkdir -p dist/sprite-previews
+          cp -a sprite-previews/all-idle-v4 dist/sprite-previews/all-idle-v4
+          rm -f dist/sprite-previews/all-idle-v4/qa_preview_v4.js dist/sprite-previews/all-idle-v4/qa_preview_v4.cjs
       - name: Configure Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
       - name: Upload dist
